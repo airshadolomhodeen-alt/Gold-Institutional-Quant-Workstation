@@ -252,7 +252,7 @@ if not df_raw.empty:
       ax1.set_title(
           "Institutional Quant Strategy Backtest vs Benchmark",
           fontsize=11,
-          fontWeight="bold",
+          fontweight="bold",
       )
       ax1.set_ylabel("Growth of $1")
       ax1.legend(loc="upper left")
@@ -261,7 +261,7 @@ if not df_raw.empty:
       ax2.fill_between(df["Date"], drawdown * 100, 0, color="crimson", alpha=0.3)
       ax2.plot(df["Date"], drawdown * 100, color="firebrick", lw=1)
       ax2.set_title(
-          "Underwater Portfolio Drawdown (%)", fontsize=11, fontWeight="bold"
+          "Underwater Portfolio Drawdown (%)", fontsize=11, fontweight="bold"
       )
       ax2.set_ylabel("Drawdown %")
       ax2.set_xlabel("Date")
@@ -282,7 +282,7 @@ if not df_raw.empty:
       ax3.set_title(
           "Block-Bootstrap Synthetic Price Paths (Small-Sample Robustness)",
           fontsize=11,
-          fontWeight="bold",
+          fontweight="bold",
       )
       ax3.set_ylabel("Simulated Price (USD)")
       ax3.set_xlabel("Synthetic Forward Steps")
