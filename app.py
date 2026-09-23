@@ -85,7 +85,7 @@ st.markdown(
 )
 
 # ==============================================================================
-# 1. ROBUST FILE LOADER WIDGET (Handles CSV & TSV automatically)
+# 1. ROBUST FILE LOADER WIDGET (Handles Extra Columns & MT4/MT5 Mismatches)
 # ==============================================================================
 uploaded_file = st.file_uploader(
     "Upload Market Feed CSV Data ('XAUUSD_M15.csv' or similar)",
@@ -96,16 +96,15 @@ df_raw = pd.DataFrame()
 
 if uploaded_file is not None:
   try:
-    # Try reading as standard CSV first, fallback to tab-separated if needed
     content = uploaded_file.getvalue().decode("utf-8", errors="ignore")
     sep = "\t" if "\t" in content.splitlines()[0] else ","
     uploaded_file.seek(0)
-    df_raw = pd.read_csv(uploaded_file, sep=sep)
+    df_raw = pd.read_csv(uploaded_file, sep=sep, header=0, engine="python")
   except Exception as e:
     st.error(f"Error reading uploaded file: {e}")
 else:
   try:
-    df_raw = pd.read_csv("XAUUSD_M15.csv", sep="\t")
+    df_raw = pd.read_csv("XAUUSD_M15.csv", sep="\t", engine="python")
   except:
     try:
       df_raw = pd.read_csv("Gold Futures Historical Data.csv")
@@ -114,7 +113,7 @@ else:
 
 if not df_raw.empty:
   try:
-    # Normalize column names (lowercase and strip brackets)
+    # Clean up column names (lowercase and strip angle brackets)
     df_raw.columns = (
         df_raw.columns.astype(str)
         .str.strip()
@@ -123,54 +122,48 @@ if not df_raw.empty:
         .str.replace(">", "", regex=False)
     )
 
-    # Map MT5/TradingView 'close' or 'price'
-    if "price" not in df_raw.columns and "close" in df_raw.columns:
-      df_raw["price"] = df_raw["close"]
-    if "open" not in df_raw.columns and "price" in df_raw.columns:
-      df_raw["open"] = df_raw["price"]
-    if "high" not in df_raw.columns and "price" in df_raw.columns:
-      df_raw["high"] = df_raw["price"]
-    if "low" not in df_raw.columns and "price" in df_raw.columns:
-      df_raw["low"] = df_raw["price"]
+    cols = list(df_raw.columns)
+    if len(cols) >= 5:
+      time_col = cols[0]
+      open_col = cols[1]
+      high_col = cols[2]
+      low_col = cols[3]
+      close_col = "close" if "close" in cols else cols[4]
 
-    numeric_cols = ["price", "open", "high", "low"]
-    for col in numeric_cols:
-      if col in df_raw.columns:
-        df_raw[col] = pd.to_numeric(
-            df_raw[col].astype(str).str.replace(",", "", regex=True),
-            errors="coerce",
-        )
-
-    # Auto-detect Date/Time column
-    date_col = None
-    for col in ["date", "time", "datetime", "timestamp"]:
-      if col in df_raw.columns:
-        date_col = col
-        break
-
-    if date_col is None:
-      date_col = df_raw.columns[0]  # Fallback to first column
-
-    df_raw["Date"] = pd.to_datetime(df_raw[date_col], errors="coerce")
-    df = (
-        df_raw.dropna(subset=["Date"])
-        .rename(
-            columns={
-                "price": "Price",
-                "open": "Open",
-                "high": "High",
-                "low": "Low",
-            }
-        )
-        .sort_values("Date")
-        .reset_index(drop=True)
-    )
-
-    if df.empty or "Price" not in df.columns:
-      st.error(
-          "Dataset loaded, but missing valid 'Price' or date columns. Please"
-          " verify format."
+      df_raw["Date"] = pd.to_datetime(df_raw[time_col], errors="coerce")
+      df_raw["Price"] = pd.to_numeric(
+          df_raw[close_col]
+          .astype(str)
+          .str.replace(",", "", regex=True),
+          errors="coerce",
       )
+      df_raw["Open"] = pd.to_numeric(
+          df_raw[open_col]
+          .astype(str)
+          .str.replace(",", "", regex=True),
+          errors="coerce",
+      )
+      df_raw["High"] = pd.to_numeric(
+          df_raw[high_col]
+          .astype(str)
+          .str.replace(",", "", regex=True),
+          errors="coerce",
+      )
+      df_raw["Low"] = pd.to_numeric(
+          df_raw[low_col].astype(str).str.replace(",", "", regex=True),
+          errors="coerce",
+      )
+
+      df = (
+          df_raw.dropna(subset=["Date", "Price"])
+          .sort_values("Date")
+          .reset_index(drop=True)
+      )
+    else:
+      raise ValueError("Dataset does not contain enough columns.")
+
+    if df.empty:
+      st.error("Processed dataframe is empty. Please check your data source.")
     else:
       # Synthetic Data Augmentation via Block Bootstrap
       np.random.seed(42)
@@ -437,5 +430,5 @@ if not df_raw.empty:
     st.error(f"Error processing data or executing models: {str(e)}")
 else:
   st.warning(
-      "Please upload a valid market data file (`.csv` or `.txt`) to begin."
+      "Please upload a valid market feed dataset (`.csv` or `.txt`) to begin."
   )
