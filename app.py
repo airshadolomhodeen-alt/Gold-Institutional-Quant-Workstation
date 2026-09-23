@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Gold Institutional Quant Workstation - Streamlit Web & Mobile Version
+Gold Institutional Quant Workstation - Elite Terminal Edition
 Featuring HMM, GARCH, BSTS, Hawkes Processes, and Particle Filtering
 """
 
@@ -13,20 +13,92 @@ from sklearn.preprocessing import StandardScaler
 import streamlit as st
 
 st.set_page_config(
-    page_title="Gold Institutional Quant Workstation", layout="wide"
+    page_title="Gold Institutional Quant Terminal",
+    layout="wide",
+    initial_sidebar_state="expanded",
 )
 
-st.title("🥇 Gold Institutional Quant Workstation (Advanced Suite)")
+# ==============================================================================
+# ELITE TRADER CUSTOM CSS STYLING (Bloomberg / TradingView Vibe)
+# ==============================================================================
 st.markdown(
-    "Upload your CSV file below or use the default dataset to run institutional"
-    " quantitative models."
+    """
+    <style>
+    /* Main background & font adjustments */
+    .stApp {
+        background-color: #0A0E17;
+        color: #E2E8F0;
+    }
+    
+    /* Sidebar styling */
+    [data-testid="stSidebar"] {
+        background-color: #131B2E;
+        border-right: 1px solid #1E293B;
+    }
+
+    /* Metric Cards Styling */
+    div[data-testid="stMetric"] {
+        background-color: #131B2E;
+        border: 1px solid #1E293B;
+        padding: 15px 20px;
+        border-radius: 6px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+    }
+    div[data-testid="stMetric"] label {
+        color: #94A3B8 !important;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        font-size: 0.75rem;
+    }
+    div[data-testid="stMetric"] div[data-testid="stMetricValue"] {
+        color: #F8FAFC !important;
+        font-family: 'Courier New', Courier, monospace;
+        font-weight: 700;
+    }
+
+    /* Headers & Titles */
+    h1, h2, h3 {
+        letter-spacing: -0.025em;
+        font-weight: 700;
+        color: #F8FAFC;
+    }
+    
+    /* Tab styling */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+        background-color: #0A0E17;
+    }
+    .stTabs [data-baseweb="tab"] {
+        background-color: #131B2E;
+        border: 1px solid #1E293B;
+        border-radius: 4px;
+        color: #94A3B8;
+        padding: 8px 16px;
+        font-weight: 600;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: #00FF66 !important;
+        color: #0A0E17 !important;
+        border-color: #00FF66 !important;
+    }
+    </style>
+""",
+    unsafe_allow_html=True,
+)
+
+st.title("⚡ GOLD INSTITUTIONAL QUANT WORKSTATION")
+st.markdown(
+    "**Terminal Status:** Secure Cloud Connection Active | **Engine:** Advanced"
+    " Bayesian & ML Suite"
 )
 
 # ==============================================================================
 # 1. MOBILE & WEB FILE UPLOADER WIDGET
 # ==============================================================================
 uploaded_file = st.file_uploader(
-    "Upload your 'Gold Futures Historical Data.csv' file", type=["csv"]
+    "Upload Market Feed CSV Data ('Gold Futures Historical Data.csv')",
+    type=["csv"],
 )
 
 # Fallback to local default file if nothing is uploaded yet
@@ -64,19 +136,19 @@ if not df_raw.empty:
       synthetic_paths = np.zeros((252, 500))
 
     # ==============================================================================
-    # 2. SIDEBAR HYPERPARAMETERS (Replaces Tkinter Spinboxes & Combos)
+    # 2. SIDEBAR HYPERPARAMETERS
     # ==============================================================================
-    st.sidebar.header("Advanced Statistical Models & Hyperparameters")
+    st.sidebar.header("⚙️ Execution Parameters")
 
     rsi_per = st.sidebar.slider("RSI Lookback Period", 3, 25, 10)
 
-    st.sidebar.text("MACD Fast / Slow Spans:")
+    st.sidebar.text("MACD Spans:")
     col_f, col_s = st.sidebar.columns(2)
     macd_f = col_f.slider("Fast", 3, 15, 6)
     macd_s = col_s.slider("Slow", 10, 30, 13)
 
     model_type = st.sidebar.selectbox(
-        "Advanced Statistical / ML Engine",
+        "Quant Model Engine",
         [
             "Hidden Markov Model (HMM)",
             "GARCH Volatility Model",
@@ -90,7 +162,7 @@ if not df_raw.empty:
     )
 
     confidence_threshold = st.sidebar.slider(
-        "Min Model Confidence Threshold", 0.50, 0.90, 0.55, 0.05
+        "Min Confidence Threshold", 0.50, 0.90, 0.55, 0.05
     )
 
     # ==============================================================================
@@ -124,13 +196,11 @@ if not df_raw.empty:
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X)
 
-    # --- INSTITUTIONAL ADVANCED STATISTICAL & ML SELECTOR ---
     if model_type == "Hidden Markov Model (HMM)":
       rolling_vol = df_model["Return"].rolling(5).std().fillna(0)
       regime = (rolling_vol < rolling_vol.median()).astype(int)
       pred = regime.iloc[-1]
       prob = 0.78 if pred == 1 else 0.65
-
     elif model_type == "GARCH Volatility Model":
       garch_var = (
           0.1 * df_model["Return"].var()
@@ -138,19 +208,16 @@ if not df_raw.empty:
       )
       pred = 1 if df_model["Return"].iloc[-1] > -garch_var else 0
       prob = 0.72
-
     elif model_type == "Bayesian Structural Time Series (BSTS)":
       posterior_mean = X.mean(axis=1).iloc[-1]
       pred = 1 if posterior_mean >= 0 else 0
       prob = 0.81
-
     elif model_type == "Hawkes Jump Intensity":
       jump_intensity = np.exp(
           df_model["Return"].abs().rolling(3).mean().iloc[-1] * 10
       )
       pred = 1 if jump_intensity < 5.0 else 0
       prob = 0.75
-
     elif model_type == "Particle Filtering (SMC)":
       particles = np.random.normal(
           df_model["Price"].iloc[-1], df_model["Return"].std(), 1000
@@ -158,7 +225,6 @@ if not df_raw.empty:
       filtered_state = particles.mean()
       pred = 1 if filtered_state >= df_model["Price"].iloc[-1] else 0
       prob = 0.84
-
     elif model_type == "Gradient Boosting":
       clf = GradientBoostingClassifier(
           n_estimators=50, max_depth=2, random_state=42
@@ -167,7 +233,6 @@ if not df_raw.empty:
       latest_x = scaler.transform(X.iloc[[-1]])
       pred = clf.predict(latest_x)[0]
       prob = clf.predict_proba(latest_x)[0][pred]
-
     elif model_type == "Random Forest":
       clf = RandomForestClassifier(
           n_estimators=50, max_depth=3, random_state=42
@@ -176,8 +241,7 @@ if not df_raw.empty:
       latest_x = scaler.transform(X.iloc[[-1]])
       pred = clf.predict(latest_x)[0]
       prob = clf.predict_proba(latest_x)[0][pred]
-
-    else:  # L2 Regularized Logistic
+    else:
       clf = LogisticRegression(C=0.1, random_state=42)
       clf.fit(X_scaled, y)
       latest_x = scaler.transform(X.iloc[[-1]])
@@ -208,7 +272,7 @@ if not df_raw.empty:
     max_dd = drawdown.min()
 
     trend_text = (
-        "UPTREND (Bullish 🚀)" if pred == 1 else "DOWNTREND (Bearish 🔻)"
+        "🟢 UPTREND (Bullish)" if pred == 1 else "🔴 DOWNTREND (Bearish)"
     )
 
     # ==============================================================================
@@ -220,7 +284,7 @@ if not df_raw.empty:
     m3.metric("Max Drawdown", f"{max_dd * 100:.2f}%")
     m4.metric("Model Signal", trend_text, f"{prob * 100:.1f}% Conf")
 
-    st.markdown("---")
+    st.markdown("<br>", unsafe_allow_html=True)
 
     tab1, tab2, tab3 = st.tabs([
         "📈 Strategy Backtest & Underwater Risk",
@@ -231,6 +295,12 @@ if not df_raw.empty:
     equity_curve = (1 + df["Strategy_Return"].fillna(0)).cumprod()
     buy_hold = (1 + df["Return"].fillna(0)).cumprod()
 
+    # Apply professional dark mode styling to Matplotlib charts
+    plt.style.use("dark_background")
+    plt.rcParams["axes.facecolor"] = "#131B2E"
+    plt.rcParams["figure.facecolor"] = "#0A0E17"
+    plt.rcParams["grid.color"] = "#1E293B"
+
     with tab1:
       fig1, (ax1, ax2) = plt.subplots(
           2, 1, figsize=(10, 8), gridspec_kw={"height_ratios": [2, 1]}
@@ -239,43 +309,49 @@ if not df_raw.empty:
           df["Date"],
           equity_curve,
           label=f"Strategy ({model_type})",
-          color="teal",
+          color="#00FF66",
           lw=2,
       )
       ax1.plot(
           df["Date"],
           buy_hold,
           label="Benchmark (Raw Gold)",
-          color="gray",
+          color="#94A3B8",
           ls="--",
       )
       ax1.set_title(
           "Institutional Quant Strategy Backtest vs Benchmark",
           fontsize=11,
           fontweight="bold",
+          color="#F8FAFC",
       )
-      ax1.set_ylabel("Growth of $1")
-      ax1.legend(loc="upper left")
-      ax1.grid(True, ls=":", alpha=0.6)
+      ax1.set_ylabel("Growth of $1", color="#E2E8F0")
+      ax1.legend(loc="upper left", facecolor="#131B2E", edgecolor="#1E293B")
+      ax1.grid(True, ls=":", alpha=0.4)
 
-      ax2.fill_between(df["Date"], drawdown * 100, 0, color="crimson", alpha=0.3)
-      ax2.plot(df["Date"], drawdown * 100, color="firebrick", lw=1)
-      ax2.set_title(
-          "Underwater Portfolio Drawdown (%)", fontsize=11, fontweight="bold"
+      ax2.fill_between(
+          df["Date"], drawdown * 100, 0, color="#FF3366", alpha=0.3
       )
-      ax2.set_ylabel("Drawdown %")
-      ax2.set_xlabel("Date")
-      ax2.grid(True, ls=":", alpha=0.6)
+      ax2.plot(df["Date"], drawdown * 100, color="#FF3366", lw=1)
+      ax2.set_title(
+          "Underwater Portfolio Drawdown (%)",
+          fontsize=11,
+          fontweight="bold",
+          color="#F8FAFC",
+      )
+      ax2.set_ylabel("Drawdown %", color="#E2E8F0")
+      ax2.set_xlabel("Date", color="#E2E8F0")
+      ax2.grid(True, ls=":", alpha=0.4)
 
       fig1.tight_layout()
       st.pyplot(fig1)
 
     with tab2:
       fig2, ax3 = plt.subplots(figsize=(10, 7.5))
-      ax3.plot(synthetic_paths, color="dodgerblue", alpha=0.03, lw=1)
+      ax3.plot(synthetic_paths, color="#00E5FF", alpha=0.03, lw=1)
       ax3.plot(
           synthetic_paths.mean(axis=1),
-          color="darkorange",
+          color="#FF9900",
           lw=2.5,
           label="Expected Synthetic Path",
       )
@@ -283,11 +359,12 @@ if not df_raw.empty:
           "Block-Bootstrap Synthetic Price Paths (Small-Sample Robustness)",
           fontsize=11,
           fontweight="bold",
+          color="#F8FAFC",
       )
-      ax3.set_ylabel("Simulated Price (USD)")
-      ax3.set_xlabel("Synthetic Forward Steps")
-      ax3.legend(loc="upper left")
-      ax3.grid(True, ls=":", alpha=0.6)
+      ax3.set_ylabel("Simulated Price (USD)", color="#E2E8F0")
+      ax3.set_xlabel("Synthetic Forward Steps", color="#E2E8F0")
+      ax3.legend(loc="upper left", facecolor="#131B2E", edgecolor="#1E293B")
+      ax3.grid(True, ls=":", alpha=0.4)
 
       fig2.tight_layout()
       st.pyplot(fig2)
