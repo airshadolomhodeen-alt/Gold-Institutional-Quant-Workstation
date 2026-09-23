@@ -121,7 +121,20 @@ if not df_raw.empty:
             errors="coerce",
         )
 
-    df_raw["Date"] = pd.to_datetime(df_raw["Date"])
+    # Auto-detect date/time column name to prevent KeyError on custom CSVs
+    date_col = None
+    for col in ["Date", "Time", "Datetime", "Timestamp", "DATE", "TIME"]:
+      if col in df_raw.columns:
+        date_col = col
+        break
+
+    if date_col is None:
+      raise ValueError(
+          "Could not find a valid Date/Time column in the uploaded CSV."
+          " Expected 'Date', 'Time', or 'Timestamp'."
+      )
+
+    df_raw["Date"] = pd.to_datetime(df_raw[date_col])
     df = df_raw.sort_values("Date").reset_index(drop=True)
 
     # Synthetic Data Augmentation via Block Bootstrap
