@@ -291,6 +291,7 @@ if not df_raw.empty:
         pred = clf.predict(latest_x)[0]
         prob = clf.predict_proba(latest_x)[0][pred]
 
+      # Generate clean signals and backtest returns
       df["Signal"] = np.where(
           (df["MACD"] > df["MACD_Signal"])
           & (df["RSI"] < 70)
@@ -299,8 +300,9 @@ if not df_raw.empty:
           -1,
       )
       df["Strategy_Return"] = df["Signal"].shift(1) * df["Return"]
+      df["Strategy_Return"] = df["Strategy_Return"].fillna(0.0)
 
-      cum_ret = (1 + df["Strategy_Return"].fillna(0)).prod() - 1
+      cum_ret = (1 + df["Strategy_Return"]).prod() - 1
       std_ret = df["Strategy_Return"].std()
       sharpe = (
           (df["Strategy_Return"].mean() / std_ret) * np.sqrt(252)
@@ -308,9 +310,9 @@ if not df_raw.empty:
           else 0.0
       )
 
-      rolling_max = (1 + df["Strategy_Return"].fillna(0)).cumprod().cummax()
+      rolling_max = (1 + df["Strategy_Return"]).cumprod().cummax()
       drawdown = (
-          (1 + df["Strategy_Return"].fillna(0)).cumprod() - rolling_max
+          (1 + df["Strategy_Return"]).cumprod() - rolling_max
       ) / rolling_max
       max_dd = drawdown.min()
 
@@ -335,7 +337,7 @@ if not df_raw.empty:
           "📋 Statistical Audit & Data Diagnostics",
       ])
 
-      equity_curve = (1 + df["Strategy_Return"].fillna(0)).cumprod()
+      equity_curve = (1 + df["Strategy_Return"]).cumprod()
       buy_hold = (1 + df["Return"].fillna(0)).cumprod()
 
       plt.style.use("dark_background")
