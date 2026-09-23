@@ -85,7 +85,7 @@ st.markdown(
 )
 
 # ==============================================================================
-# 1. ROBUST FILE LOADER WIDGET (Handles Extra Columns & MT4/MT5 Mismatches)
+# 1. ROBUST FILE LOADER WIDGET (Handles 7-Column MT4/MT5 Extra Spread Mismatch)
 # ==============================================================================
 uploaded_file = st.file_uploader(
     "Upload Market Feed CSV Data ('XAUUSD_M15.csv' or similar)",
@@ -97,14 +97,38 @@ df_raw = pd.DataFrame()
 if uploaded_file is not None:
   try:
     content = uploaded_file.getvalue().decode("utf-8", errors="ignore")
-    sep = "\t" if "\t" in content.splitlines()[0] else ","
-    uploaded_file.seek(0)
-    df_raw = pd.read_csv(uploaded_file, sep=sep, header=0, engine="python")
+    lines = content.splitlines()
+    if len(lines) > 1:
+      rows = []
+      for line in lines[1:]:
+        parts = line.split("\t") if "\t" in line else line.split(",")
+        if len(parts) >= 6:
+          t = parts[0].strip().replace('"', "")
+          op = parts[1].strip()
+          hi = parts[2].strip()
+          lo = parts[3].strip()
+          cl = parts[4].strip()
+          vol = parts[-1].strip()  # Last element is volume
+          rows.append([t, op, hi, lo, cl, vol])
+      df_raw = pd.DataFrame(
+          rows, columns=["Time", "Open", "High", "Low", "Close", "Volume"]
+      )
   except Exception as e:
-    st.error(f"Error reading uploaded file: {e}")
+    st.error(f"Error parsing uploaded file: {e}")
 else:
   try:
-    df_raw = pd.read_csv("XAUUSD_M15.csv", sep="\t", engine="python")
+    rows = []
+    with open("XAUUSD_M15.csv", "r", encoding="utf-8", errors="ignore") as f:
+      header = f.readline()  # skip header
+      for line in f:
+        parts = line.strip().split("\t")
+        if len(parts) >= 6:
+          rows.append(
+              [parts[0], parts[1], parts[2], parts[3], parts[4], parts[-1]]
+          )
+    df_raw = pd.DataFrame(
+        rows, columns=["Time", "Open", "High", "Low", "Close", "Volume"]
+    )
   except:
     try:
       df_raw = pd.read_csv("Gold Futures Historical Data.csv")
@@ -113,54 +137,17 @@ else:
 
 if not df_raw.empty:
   try:
-    # Clean up column names (lowercase and strip angle brackets)
-    df_raw.columns = (
-        df_raw.columns.astype(str)
-        .str.strip()
-        .str.lower()
-        .str.replace("<", "", regex=False)
-        .str.replace(">", "", regex=False)
+    df_raw["Date"] = pd.to_datetime(df_raw["Time"], errors="coerce")
+    df_raw["Price"] = pd.to_numeric(df_raw["Close"], errors="coerce")
+    df_raw["Open"] = pd.to_numeric(df_raw["Open"], errors="coerce")
+    df_raw["High"] = pd.to_numeric(df_raw["High"], errors="coerce")
+    df_raw["Low"] = pd.to_numeric(df_raw["Low"], errors="coerce")
+
+    df = (
+        df_raw.dropna(subset=["Date", "Price"])
+        .sort_values("Date")
+        .reset_index(drop=True)
     )
-
-    cols = list(df_raw.columns)
-    if len(cols) >= 5:
-      time_col = cols[0]
-      open_col = cols[1]
-      high_col = cols[2]
-      low_col = cols[3]
-      close_col = "close" if "close" in cols else cols[4]
-
-      df_raw["Date"] = pd.to_datetime(df_raw[time_col], errors="coerce")
-      df_raw["Price"] = pd.to_numeric(
-          df_raw[close_col]
-          .astype(str)
-          .str.replace(",", "", regex=True),
-          errors="coerce",
-      )
-      df_raw["Open"] = pd.to_numeric(
-          df_raw[open_col]
-          .astype(str)
-          .str.replace(",", "", regex=True),
-          errors="coerce",
-      )
-      df_raw["High"] = pd.to_numeric(
-          df_raw[high_col]
-          .astype(str)
-          .str.replace(",", "", regex=True),
-          errors="coerce",
-      )
-      df_raw["Low"] = pd.to_numeric(
-          df_raw[low_col].astype(str).str.replace(",", "", regex=True),
-          errors="coerce",
-      )
-
-      df = (
-          df_raw.dropna(subset=["Date", "Price"])
-          .sort_values("Date")
-          .reset_index(drop=True)
-      )
-    else:
-      raise ValueError("Dataset does not contain enough columns.")
 
     if df.empty:
       st.error("Processed dataframe is empty. Please check your data source.")
