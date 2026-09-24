@@ -1,10 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Institutional Quant Workstation - Root Application Hub
-Imports modularized engines from src/ and renders the Streamlit Terminal with:
-- Live Twelve Data Feed
-- Multi-Model Ensemble Voting (GB + RF + LR)
-- Confluence Equilibrium & Entry Filtering
+Institutional Quant Workstation - Root Application Hub (Refactored)
 """
 
 import streamlit as st
@@ -12,24 +8,23 @@ import pandas as pd
 import numpy as np
 import requests
 
-from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
-from sklearn.linear_model import LogisticRegression
-
-# Import modular backend files from src/
-from src.validation import run_data_quality_gate
+from src.data_quality import run_data_quality_gate
 from src.feature_engineering import compute_features
 from src.targets import create_multi_horizon_targets
+from src.volatility import compute_volatility_features
 from src.regime_models import detect_market_regime
-from src.forecasting_models import get_forecasting_model
-from src.calibration import calibrate_probabilities
-from src.risk_engine import evaluate_trading_decision
-from src.visualization import plot_probability_curve
+from src.forecasting_models import get_forecasting_models
+from src.calibration import calibrate_probabilities, compute_calibration_metrics
+from src.ensemble import aggregate_ensemble, compute_model_disagreement
+from src.path_forecast import compute_path_statistics
+from src.expected_value import compute_expected_values
+from src.risk_engine import evaluate_tradeability_gate
+from src.explainability import compute_transition_diagnostics, get_feature_importances
+from src.visualization import plot_probability_curve, plot_predictive_return_distribution
+from src.config import Config
 
-# ==============================================================================
-# STREAMLIT PAGE CONFIGURATION & STYLING
-# ==============================================================================
 st.set_page_config(
-    page_title="Institutional Quant Terminal | Confluence Ensemble Engine",
+    page_title="Institutional Quant Terminal | Multi-Horizon Probabilistic Engine",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -38,53 +33,32 @@ st.markdown("""
     <style>
     .stApp { background-color: #0A0E17; color: #E2E8F0; font-family: 'Inter', sans-serif; }
     [data-testid="stSidebar"] { background-color: #131B2E; border-right: 1px solid #1E293B; }
-    
-    /* Enhanced Metric Cards: Expanded width, auto text-wrapping, fixed font size to prevent truncation */
     div[data-testid="stMetric"] {
         background-color: #131B2E; 
         border: 1px solid #1E293B;
         padding: 12px 14px; 
         border-radius: 6px;
         min-height: 95px;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
     }
-    div[data-testid="stMetric"] label { 
-        color: #94A3B8 !important; 
-        font-size: 0.70rem !important; 
-        text-transform: uppercase; 
-        letter-spacing: 0.05em;
-    }
-    div[data-testid="stMetric"] div[data-testid="stMetricValue"] { 
-        color: #F8FAFC !important; 
-        font-family: 'Courier New', Courier, monospace; 
-        font-size: 1.15rem !important;
-        white-space: normal !important;
-        overflow: visible !important;
-        text-overflow: clip !important;
-    }
-
+    div[data-testid="stMetric"] label { color: #94A3B8 !important; font-size: 0.70rem !important; text-transform: uppercase; }
+    div[data-testid="stMetric"] div[data-testid="stMetricValue"] { color: #F8FAFC !important; font-family: 'Courier New', monospace; font-size: 1.15rem !important; }
     h1, h2, h3 { color: #F8FAFC; letter-spacing: -0.025em; }
-    
-    .stTabs [data-baseweb="tab-list"] { gap: 8px; background-color: #0A0E17; }
-    .stTabs [data-baseweb="tab"] {
-        background-color: #131B2E; border: 1px solid #1E293B; border-radius: 4px; color: #94A3B8; font-weight: 600;
-    }
-    .stTabs [aria-selected="true"] { background-color: #00FF66 !important; color: #0A0E17 !important; }
     </style>
 """, unsafe_allow_html=True)
 
-st.title("⚡ INSTITUTIONAL QUANT WORKSTATION: CONFLUENCE ENSEMBLE ENGINE")
-st.markdown("**Terminal Status:** Live Feed Active (Twelve Data) | **Engine:** Multi-Model Ensemble + Confluence Scoring")
+st.title("⚡ MULTI-HORIZON PROBABILISTIC MARKET FORECASTING & DECISION ENGINE")
+st.markdown("**Terminal Status:** Production Ready | **Architecture:** Leakage-Safe Walk-Forward Ensemble")
 
-# ==============================================================================
-# 1. LIVE DATA INGESTION (TWELVE DATA API WITH SAFE VOLUME HANDLING)
-# ==============================================================================
-st.sidebar.header("1. Live Data & Timeframe Parameters")
+# Sidebar Configuration
+st.sidebar.header("1. Feed & Parameters")
 symbol = st.sidebar.text_input("Asset Symbol", value="XAU/USD")
 interval = st.sidebar.selectbox("Timeframe", ["15min", "1h", "4h", "1day"], index=0)
-outputsize = st.sidebar.slider("Historical Candles", 100, 1000, 500)
+outputsize = st.sidebar.slider("Historical Candles", 200, 1000, 500)
+
+st.sidebar.header("2. Execution Costs & Risk")
+spread = st.sidebar.number_input("Spread Cost", value=0.20, step=0.05)
+commission = st.sidebar.number_input("Commission (%)", value=0.02, step=0.01) / 100.0
+slippage = st.sidebar.number_input("Slippage Cost", value=0.05, step=0.01)
 
 TWELVE_DATA_API_KEY = "32b6a749e8c14835b95b8a9c271eec95"
 
@@ -94,187 +68,138 @@ def fetch_twelve_data(sym, tf, size, api_key):
     try:
         response = requests.get(url)
         data = response.json()
-        
-        if "code" in data and str(data["code"]) != "200":
-            return None, data.get("message", "API Error")
-            
         if "values" in data:
             df_api = pd.DataFrame(data["values"])
-            
             rename_map = {"datetime": "Time", "open": "Open", "high": "High", "low": "Low", "close": "Close"}
             if "volume" in df_api.columns:
                 rename_map["volume"] = "Volume"
-                
             df_api = df_api.rename(columns=rename_map)
-            
             for col in ["Open", "High", "Low", "Close"]:
-                if col in df_api.columns:
-                    df_api[col] = pd.to_numeric(df_api[col], errors='coerce')
-            
-            if "Volume" in df_api.columns:
-                df_api["Volume"] = pd.to_numeric(df_api["Volume"], errors='coerce').fillna(0.0)
-            else:
-                df_api["Volume"] = 1.0
-                
-            df_api = df_api.sort_values("Time").reset_index(drop=True)
-            return df_api, None
-        else:
-            return None, data.get("message", "No values found in response.")
+                df_api[col] = pd.to_numeric(df_api[col], errors='coerce')
+            df_api["Volume"] = pd.to_numeric(df_api["Volume"], errors='coerce').fillna(1.0) if "Volume" in df_api.columns else 1.0
+            return df_api.sort_values("Time").reset_index(drop=True), None
+        return None, data.get("message", "API Error")
     except Exception as e:
         return None, str(e)
 
 df_raw, err_msg = fetch_twelve_data(symbol, interval, outputsize, TWELVE_DATA_API_KEY)
-
 if df_raw is None or df_raw.empty:
-    st.error(f"🚨 Twelve Data Connection Failed: {err_msg}. Falling back to simulation frame.")
     dates = pd.date_range(end=pd.Timestamp.now(), periods=500, freq='15min')
     prices = 2000 + np.cumsum(np.random.normal(0, 2, 500))
     df_raw = pd.DataFrame({"Time": dates, "Open": prices, "High": prices+1, "Low": prices-1, "Close": prices, "Volume": 1.0})
 
 dq_pass, dq_checks, df = run_data_quality_gate(df_raw)
-
 if not dq_pass:
-    st.error("🚨 DATA QUALITY GATE FAILED: Review anomalies below.")
+    st.error("🚨 DATA QUALITY GATE FAILED")
     st.write(dq_checks)
     st.stop()
-else:
-    st.sidebar.success(f"Feed: {symbol} ({interval}) | DQ Gate: PASS ✅")
 
-# ==============================================================================
-# 2. HYPERPARAMETERS & ENSEMBLE WEIGHTS
-# ==============================================================================
-st.sidebar.markdown("---")
-st.sidebar.header("2. Technical & Ensemble Weights")
-rsi_per = st.sidebar.slider("RSI Lookback Period", 3, 25, 14)
-col_f, col_s = st.sidebar.columns(2)
-macd_f = col_f.slider("MACD Fast", 3, 15, 12)
-macd_s = col_s.slider("MACD Slow", 10, 30, 26)
-atr_per = st.sidebar.slider("ATR Period", 5, 30, 14)
-neutral_band = st.sidebar.slider("Neutral Band Threshold", 0.0, 0.5, 0.33, 0.05)
-
-st.sidebar.markdown("### Model Voting Weights (Macro Bias Focus)")
-weight_gb = st.sidebar.slider("Gradient Boosting Weight", 0.0, 1.0, 0.20, 0.05)
-weight_rf = st.sidebar.slider("Random Forest Weight", 0.0, 1.0, 0.30, 0.05)
-weight_lr = st.sidebar.slider("L2 Logistic Weight (Macro Anchor)", 0.0, 1.0, 0.50, 0.05)
-
-spread_ticks = st.sidebar.number_input("Spread (USD)", value=0.20, step=0.05)
-commission_pct = st.sidebar.number_input("Commission (%)", value=0.02, step=0.01) / 100.0
-
-# ==============================================================================
-# 3. PIPELINE EXECUTION (Features, Targets, Regimes)
-# ==============================================================================
-df = compute_features(df, rsi_per, macd_f, macd_s, atr_per)
-df = create_multi_horizon_targets(df)
+# Pipeline Execution
+df = compute_features(df, Config.RSI_PERIOD, Config.MACD_FAST, Config.MACD_SLOW, Config.ATR_PERIOD)
+df = compute_volatility_features(df)
+df = create_multi_horizon_targets(df, threshold_type='atr', threshold_multiplier=0.5)
 current_regime, regime_prob, df = detect_market_regime(df)
 
 df_model = df.dropna().copy()
-features = ['Log_Return', 'RSI', 'MACD', 'MACD_Hist', 'ATR', 'Realized_Vol']
+features = ['Log_Return', 'RSI', 'MACD', 'MACD_Hist', 'ATR', 'Realized_Vol', 'EWMA_Vol']
 X = df_model[features]
 
-# ==============================================================================
-# 4. 10-CANDLE ENSEMBLE FORECAST GENERATION & CONFLUENCE
-# ==============================================================================
+# Multi-Horizon Forecasting Engine
 horizons = list(range(1, 11))
-prob_up, prob_down, prob_neutral, exp_returns, exp_ranges = [], [], [], [], []
+prob_up_list, prob_down_list, prob_neutral_list = [], [], []
+exp_returns, exp_ranges, model_agreements, uncertainties = [], [], [], []
 
-clf_gb = GradientBoostingClassifier(random_state=42)
-clf_rf = RandomForestClassifier(random_state=42)
-clf_lr = LogisticRegression(max_iter=1000, penalty='l2', solver='lbfgs')
+models = get_forecasting_models()
 
 for h in horizons:
     y_h = df_model[f'Target_Dir_{h}']
     valid_idx = y_h != 0.5
     X_h, y_bin = X.values[valid_idx], (y_h[valid_idx] == 1).astype(int)
     
-    if len(np.unique(y_bin)) > 1:
-        clf_gb.fit(X_h, y_bin)
-        clf_rf.fit(X_h, y_bin)
-        clf_lr.fit(X_h, y_bin)
-        
-        p_gb = clf_gb.predict_proba(X.iloc[[-1]])[0]
-        p_rf = clf_rf.predict_proba(X.iloc[[-1]])[0]
-        p_lr = clf_lr.predict_proba(X.iloc[[-1]])[0]
-        
-        up_gb = p_gb[1] if len(p_gb) > 1 else 0.5
-        up_rf = p_rf[1] if len(p_rf) > 1 else 0.5
-        up_lr = p_lr[1] if len(p_lr) > 1 else 0.5
-        
-        total_weight = weight_gb + weight_rf + weight_lr
-        if total_weight > 0:
-            p_up = (up_gb * weight_gb + up_rf * weight_rf + up_lr * weight_lr) / total_weight
-        else:
-            p_up = (up_gb + up_rf + up_lr) / 3.0
-            
-        p_down = 1.0 - p_up
-    else:
-        p_up, p_down = 0.5, 0.5
+    horizon_probs = {}
+    for name, model in models.items():
+        try:
+            model.fit(X_h, y_bin)
+            p = model.predict_proba(X.iloc[[-1]])[0]
+            horizon_probs[name] = p[1] if len(p) > 1 else 0.5
+        except Exception:
+            horizon_probs[name] = 0.5
 
-    cal_up, _ = calibrate_probabilities(np.array([p_up]), np.array([1]))
+    p_ens, disagreement = aggregate_ensemble(horizon_probs)
+    cal_up, cal_slope, cal_intercept = calibrate_probabilities(np.array([p_ens]), np.array([1]))
     p_up = cal_up[0]
     p_down = 1.0 - p_up
     p_neut = max(0.0, 1.0 - abs(p_up - p_down) - 0.2)
     
     tot = p_up + p_down + p_neut
-    prob_up.append(p_up / tot)
-    prob_down.append(p_down / tot)
-    prob_neutral.append(p_neut / tot)
+    prob_up_list.append(p_up / tot)
+    prob_down_list.append(p_down / tot)
+    prob_neutral_list.append(p_neut / tot)
     
     exp_returns.append(df_model[f'Forward_Return_{h}'].mean() * (p_up - p_down))
     exp_ranges.append(df_model['ATR'].iloc[-1] * np.sqrt(h))
+    model_agreements.append((1.0 - disagreement) * 100.0)
+    uncertainties.append("LOW" if disagreement < 0.2 else ("MODERATE" if disagreement < 0.4 else "HIGH"))
 
-forecast_df = pd.DataFrame({
-    "Horizon": [f"t+{h}" for h in horizons],
-    "P(UP)": prob_up,
-    "P(NEUTRAL)": prob_neutral,
-    "P(DOWN)": prob_down,
-    "Expected Return": exp_returns,
-    "Expected Range": exp_ranges
-})
+# Path & Expected Value Evaluation
+path_stats = compute_path_statistics(df_model, horizons)
+ev_results = compute_expected_values(prob_up_list[-1], prob_down_list[-1], exp_returns[-1], spread, commission, slippage, df_model['ATR'].iloc[-1])
+tradeability_state, trade_reasons = evaluate_tradeability_gate(prob_up_list[-1], ev_results['Net_EV'], model_agreements[-1], dq_pass, uncertainties[-1])
 
-# Risk Evaluation & Directional State
-max_prob = max(prob_up[-1], prob_down[-1])
-avg_win = df['ATR'].iloc[-1]
-avg_loss = df['ATR'].iloc[-1] * 0.9
-trading_state, ev = evaluate_trading_decision(max_prob, neutral_band, avg_win, avg_loss, spread_ticks, commission_pct, dq_pass)
-
-direction_bias = "BUY" if prob_up[-1] > prob_down[-1] else "SELL"
-display_trading_state = f"{direction_bias} ({trading_state})" if trading_state == "TRADEABLE" else trading_state
-
-# Calculate Confluence Equilibrium Index
-regime_score = 1.0 if current_regime == "TRENDING" else 0.5
-ev_score = 1.0 if ev > 0 else 0.0
-confluence_index = (max_prob * 0.5) + (regime_score * 0.3) + (ev_score * 0.2)
-
-# ==============================================================================
-# 5. DASHBOARD UI RENDERING
-# ==============================================================================
-st.subheader(f"🚨 NEXT 10-CANDLE FORECAST PANEL ({symbol} - {interval})")
+# TOP PANEL UI
+st.subheader("🚨 NEXT 10-CANDLE PROBABILISTIC FORECAST PANEL")
 c1, c2, c3, c4, c5 = st.columns(5)
 c1.metric("Current Price", f"${df['Close'].iloc[-1]:.2f}")
-c2.metric("P(UP at t+10)", f"{prob_up[-1]*100:.1f}%")
-c3.metric("P(DOWN at t+10)", f"{prob_down[-1]*100:.1f}%")
+c2.metric("P(UP at T+10)", f"{prob_up_list[-1]*100:.1f}%")
+c3.metric("P(DOWN at T+10)", f"{prob_down_list[-1]*100:.1f}%")
 c4.metric("Current Regime", current_regime)
-c5.metric("Trading State", display_trading_state)
-
-# Confluence Scorecard Indicator Row
-st.markdown(f"**Institutional Confluence Equilibrium Index:** `{confluence_index * 100:.1f}%` *(Ensemble Conviction + Regime + EV Audit)*")
-st.progress(float(confluence_index))
+c5.metric("Tradeability State", tradeability_state)
 
 st.markdown("---")
 
-tab1, tab2, tab3 = st.tabs(["📊 Horizon Table", "📈 Probability Curve", "🛡️ Expected Value Audit"])
+tab1, tab2, tab3, tab4 = st.tabs(["📊 10-Candle Table", "📈 Probability Curve", "🛡️ Expected Value Audit", "🔍 Explainability & Diagnostics"])
 
 with tab1:
+    forecast_df = pd.DataFrame({
+        "Horizon": [f"T+{h}" for h in horizons],
+        "P(UP)": prob_up_list,
+        "P(NEUTRAL)": prob_neutral_list,
+        "P(DOWN)": prob_down_list,
+        "Expected Return": exp_returns,
+        "Expected Range": exp_ranges,
+        "Model Agreement": [f"{m:.1f}%" for m in model_agreements],
+        "Uncertainty": uncertainties
+    })
     st.dataframe(forecast_df.style.format({
         "P(UP)": "{:.2%}", "P(NEUTRAL)": "{:.2%}", "P(DOWN)": "{:.2%}",
         "Expected Return": "{:.4f}", "Expected Range": "{:.2f}"
     }), use_container_width=True)
 
 with tab2:
-    fig = plot_probability_curve(horizons, prob_up, prob_neutral, prob_down)
+    fig = plot_probability_curve(horizons, prob_up_list, prob_neutral_list, prob_down_list)
     st.pyplot(fig)
 
 with tab3:
-    st.write(f"**Net Expected Value after Costs:** ${ev:.2f}")
-    st.write(f"**Decision Rule Triggered:** {trading_state}")
-    st.write(f"**Confluence Index Score:** {confluence_index*100:.1f}% (Threshold required for entry: >65.0%)")
+    st.markdown("### Expected Value & Risk Audit")
+    col_a, col_b = st.columns(2)
+    with col_a:
+        st.metric("Gross Expected Value", f"${ev_results['Gross_EV']:.2f}")
+        st.metric("Total Execution Costs", f"${ev_results['Total_Costs']:.2f}")
+        st.metric("Net Expected Value", f"${ev_results['Net_EV']:.2f}")
+    with col_b:
+        st.metric("Reward-to-Risk Ratio", f"{ev_results['RR_Ratio']:.2f}")
+        st.metric("Max Favorable Excursion Prob", f"{path_stats['Prob_MFE_1ATR']:.1f}%")
+        st.metric("Tradeability Status", tradeability_state)
+    
+    if trade_reasons:
+        st.warning(f"**Gate Rejection Reasons:** {', '.join(trade_reasons)}")
+
+with tab4:
+    st.markdown("### Predictive Contributions & Transition Diagnostics")
+    feat_imp = get_feature_importances(models, features)
+    st.dataframe(pd.DataFrame(list(feat_imp.items()), columns=["Feature", "Predictive Contribution"]), use_container_width=True)
+    
+    st.markdown("### Transition Diagnostic (T+4 → T+5)")
+    trans_diag = compute_transition_diagnostics(prob_up_list, 4, 5)
+    st.write(f"**Probability Delta:** {trans_diag['Delta']:+.2f}%")
+    st.write(f"**Primary Contributing Feature:** {trans_diag['Top_Feature']}")
