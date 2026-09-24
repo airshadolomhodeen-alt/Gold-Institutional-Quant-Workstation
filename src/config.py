@@ -1,10 +1,21 @@
-# -*- coding: utf-8 -*-
-"""
-Central Configuration Dataclass
-"""
 class Config:
     RSI_PERIOD = 14
     MACD_FAST = 12
     MACD_SLOW = 26
+    MACD_SIGNAL = 9
     ATR_PERIOD = 14
+    VOLATILITY_WINDOW = 20
     EWMA_LAMBDA = 0.94
+    FORECAST_HORIZON = 10
+    CLASSIFICATION_THRESHOLD_TYPE = 'atr'  # options: 'fixed', 'atr', 'volatility'
+    THRESHOLD_MULTIPLIER = 0.5
+    NEUTRAL_THRESHOLD = 0.001
+    ENSEMBLE_METHOD = 'inverse_brier'
+    CALIBRATION_METHOD = 'isotonic'
+    WALK_FORWARD_TRAIN_WINDOW = 300
+    WALK_FORWARD_TEST_WINDOW = 50
+    EMBARGO_PERIOD = 10
+    DEFAULT_SPREAD = 0.20
+    DEFAULT_COMMISSION = 0.0002
+    DEFAULT_SLIPPAGE = 0.05
+    RISK_PER_TRADE = 0.01
