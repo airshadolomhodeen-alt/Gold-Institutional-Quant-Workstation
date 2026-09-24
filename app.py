@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Institutional Quant Terminal - Three-Stage Cumulative Simulation-Driven Production Hub
+Enhanced with Quantitative Microstructure & Point Process Features (Velu, Hardy, & Nehren)
 """
 
 import streamlit as st
@@ -84,7 +85,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("⚡ THREE-STAGE SIMULATION-DRIVEN PROBABILISTIC FORECASTING ENGINE")
-st.markdown("**Terminal Status:** Production Ready | **Architecture:** 60/20/20 Cumulative Partitioning & Confidence Curve Validation")
+st.markdown("**Terminal Status:** Production Ready | **Architecture:** Microstructure-Enhanced 60/20/20 Cumulative Partitioning")
 
 # ==============================================================================
 # SIDEBAR PARAMETERS
@@ -95,10 +96,11 @@ interval = st.sidebar.selectbox("Timeframe", ["15min", "1h", "4h", "1day"], inde
 outputsize = st.sidebar.slider("Historical Candles", 200, 1000, 500)
 sim_N = st.sidebar.selectbox("Simulation Runs (N)", [5000, 10000, 20000], index=1)
 
-st.sidebar.header("2. Execution Costs & Risk")
+st.sidebar.header("2. Execution Costs & Market Impact")
 spread = st.sidebar.number_input("Spread Cost", value=0.20, step=0.05)
 commission = st.sidebar.number_input("Commission (%)", value=0.02, step=0.01) / 100.0
 slippage = st.sidebar.number_input("Slippage Cost", value=0.05, step=0.01)
+use_market_impact = st.sidebar.checkbox("Dynamic Impact Model (Ch. 9)", value=True)
 
 st.sidebar.markdown("### 3. Tradeability Gate Thresholds")
 min_conviction = st.sidebar.slider("Min Probability Conviction", 0.50, 0.80, 0.53, 0.01)
@@ -144,6 +146,12 @@ if not dq_pass:
 df = compute_features(df, Config.RSI_PERIOD, Config.MACD_FAST, Config.MACD_SLOW, Config.ATR_PERIOD)
 df = compute_volatility_features(df)
 
+# Quantitative Microstructure Additions: Order Flow Imbalance (OFI) & Hawkes Intensity Proxy
+df['Price_Change'] = df['Close'].diff().fillna(0)
+df['Volume_Sign'] = np.where(df['Price_Change'] > 0, 1, np.where(df['Price_Change'] < 0, -1, 0))
+df['OFI'] = (df['Volume'] * df['Volume_Sign']).rolling(window=5).mean().fillna(0)
+df['Hawkes_Intensity'] = df['Volume'].rolling(window=10).mean() / (df['ATR'] + 1e-8)
+
 try:
     df = create_multi_horizon_targets(df, threshold_type='atr', threshold_multiplier=0.5)
 except TypeError:
@@ -162,11 +170,11 @@ n_total = len(df_model)
 idx_60 = int(n_total * 0.60)
 idx_80 = int(n_total * 0.80)
 
-df_stage1 = df_model.iloc[:idx_60]                 # PRE_SIM_1 (60% Training)
-df_stage2 = df_model.iloc[idx_60:idx_80]           # PRE_SIM_2 (20% Validation/Tuning)
-df_stage3 = df_model.iloc[idx_80:]                 # FINAL_SIM (20% Out-of-Sample Confidence Curve)
+df_stage1 = df_model.iloc[:idx_60]                     # PRE_SIM_1 (60% Training)
+df_stage2 = df_model.iloc[idx_60:idx_80]               # PRE_SIM_2 (20% Validation/Tuning)
+df_stage3 = df_model.iloc[idx_80:]                     # FINAL_SIM (20% Out-of-Sample Confidence Curve)
 
-features = ['Log_Return', 'RSI', 'MACD', 'MACD_Hist', 'ATR', 'Realized_Vol', 'EWMA_Vol', 'SMA_10_Slope', 'LR_Slope_14']
+features = ['Log_Return', 'RSI', 'MACD', 'MACD_Hist', 'ATR', 'Realized_Vol', 'EWMA_Vol', 'SMA_10_Slope', 'LR_Slope_14', 'OFI', 'Hawkes_Intensity']
 models = get_forecasting_models()
 horizons = list(range(1, 11))
 return_predictions = generate_return_predictions(df_stage3 if len(df_stage3) > 10 else df_model, features, horizons)
@@ -220,7 +228,11 @@ for h in horizons:
     uncertainties.append("LOW" if disagreement < 0.2 else ("MODERATE" if disagreement < 0.4 else "HIGH"))
 
 path_stats = compute_path_statistics(df_model, horizons)
-ev_results = compute_expected_values(prob_up_list[-1], prob_down_list[-1], exp_returns[-1], spread, commission, slippage, df_model['ATR'].iloc[-1])
+
+# Dynamic Market Impact Adjustment (Ch. 9)
+effective_slippage = slippage * (1.0 + 0.1 * df_model['Hawkes_Intensity'].iloc[-1]) if use_market_impact else slippage
+ev_results = compute_expected_values(prob_up_list[-1], prob_down_list[-1], exp_returns[-1], spread, commission, effective_slippage, df_model['ATR'].iloc[-1])
+
 tradeability_state, trade_reasons = evaluate_tradeability_gate(
     prob_up_list[-1], ev_results['Net_EV'], model_agreements[-1], dq_pass, uncertainties[-1],
     min_conviction=min_conviction, max_disagreement=max_disagreement
@@ -306,7 +318,7 @@ with tab2:
     st.pyplot(fig)
 
 with tab3:
-    st.markdown("### 🛡️ Expected Value & Risk Audit")
+    st.markdown("### 🛡️ Expected Value & Market Impact Audit")
     col_a, col_b = st.columns(2)
     with col_a:
         st.metric("Gross Expected Value", f"${ev_results['Gross_EV']:.2f}")
@@ -314,7 +326,7 @@ with tab3:
         st.metric("Net Expected Value", f"${ev_results['Net_EV']:.2f}")
     with col_b:
         st.metric("Reward-to-Risk Ratio (R:R)", f"1 : {ev_results['RR_Ratio']:.2f}")
-        st.metric("Expected Adverse Excursion (MAE)", f"${path_stats['Expected_Max_Adverse_Excursion']:.2f}")
+        st.metric("Effective Slippage (Impact)", f"${effective_slippage:.3f}")
         st.metric("Tradeability Status", tradeability_state)
 
     st.markdown("---")
@@ -338,20 +350,19 @@ with tab3:
         rr_ratio = reward_tp1 / risk if risk > 0 else 0.0
         cal_success = (prob_up_list[-1] if direction == "LONG" else prob_down_list[-1]) * 100
 
-        # PART 40 FORMATTED ENTRY PLAN LAYER
         st.markdown(f"""
         ```text
         ENTRY PLAN
-        Direction             : {direction}
-        Entry                 : {current_close:.1f}
-        TP1                   : {tp1:.1f}    ({tp1_pts})
-        TP2                   : {tp2:.1f}    ({tp2_pts})
-        SL                    : {sl:.1f}    ({sl_pts})
-        R:R                   : 1 : {rr_ratio:.2f}  (TP1)
-        Calibrated P(Success) : {cal_success:.1f}%
-        Net Expected Value    : {ev_results['Net_EV']:+.1f} points (after costs)
-        Tradeability          : TRADEABLE (passed all gates)
-        Partition Source      : FINAL_SIM ($CASENUM = {casenum_id.replace('CASENUM-', '')})
+        Direction              : {direction}
+        Entry                  : {current_close:.1f}
+        TP1                    : {tp1:.1f}    ({tp1_pts})
+        TP2                    : {tp2:.1f}    ({tp2_pts})
+        SL                     : {sl:.1f}    ({sl_pts})
+        R:R                    : 1 : {rr_ratio:.2f}  (TP1)
+        Calibrated P(Success)  : {cal_success:.1f}%
+        Net Expected Value     : {ev_results['Net_EV']:+.1f} points (after impact costs)
+        Tradeability           : TRADEABLE (passed all gates)
+        Partition Source       : FINAL_SIM ($CASENUM = {casenum_id.replace('CASENUM-', '')})
         ```
         """)
         st.success("✅ **Gate Status:** TRADEABLE — Execution plan generated from FINAL_SIM partition.")
@@ -359,9 +370,9 @@ with tab3:
         st.markdown(f"""
         ```text
         ENTRY PLAN SUPPRESSED
-        Tradeability          : NO-TRADE
-        Reasons               : {", ".join(trade_reasons or ["Insufficient edge or high model disagreement."])}
-        Partition Source      : FINAL_SIM ($CASENUM = {casenum_id.replace('CASENUM-', '')})
+        Tradeability           : NO-TRADE
+        Reasons                : {", ".join(trade_reasons or ["Insufficient edge or high model disagreement."])}
+        Partition Source       : FINAL_SIM ($CASENUM = {casenum_id.replace('CASENUM-', '')})
         ```
         """)
         st.warning("🚫 **Execution Plan Suppressed (NO-TRADE State)** — Failed conviction, EV, or model agreement thresholds.")
