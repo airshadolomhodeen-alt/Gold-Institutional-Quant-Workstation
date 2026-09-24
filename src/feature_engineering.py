@@ -1,10 +1,18 @@
+# -*- coding: utf-8 -*-
+"""
+Feature Engineering Module - Trend Slopes & Modernized Pandas Filling
+"""
+
 import numpy as np
 import pandas as pd
 
 def compute_features(df, rsi_period=14, macd_fast=12, macd_slow=26, atr_period=14):
     """
     Computes technical features including trend slopes and momentum metrics.
+    Uses modern Pandas syntax to prevent deprecation errors.
     """
+    df = df.copy()
+    
     # Base price changes
     df['Log_Return'] = np.log(df['Close'] / df['Close'].shift(1))
     
@@ -30,16 +38,12 @@ def compute_features(df, rsi_period=14, macd_fast=12, macd_slow=26, atr_period=1
     df['Realized_Vol'] = df['Log_Return'].rolling(window=20).std()
     df['EWMA_Vol'] = df['Log_Return'].ewm(span=20).std()
 
-    # ==========================================
-    # TREND & SLOPE FEATURES (PART 42 ADDITION)
-    # ==========================================
-    # 10-candle and 20-candle moving average slopes
+    # Trend & Slope Features (For capturing directional momentum)
     df['SMA_10'] = df['Close'].rolling(window=10).mean()
     df['SMA_20'] = df['Close'].rolling(window=20).mean()
-    df['SMA_10_Slope'] = df['SMA_10'].diff(3) / 3  # Rate of change over 3 periods
+    df['SMA_10_Slope'] = df['SMA_10'].diff(3) / 3
     df['SMA_20_Slope'] = df['SMA_20'].diff(5) / 5
     
-    # Linear regression slope over a 14-candle rolling window
     def rolling_slope(array):
         x = np.arange(len(array))
         if len(array) < 2 or np.isnan(array).any():
@@ -49,4 +53,5 @@ def compute_features(df, rsi_period=14, macd_fast=12, macd_slow=26, atr_period=1
 
     df['LR_Slope_14'] = df['Close'].rolling(window=14).apply(rolling_slope, raw=True)
     
-    return df.fillna(method='bfill').fillna(0)
+    # Modern Pandas fill method (fixes the bfill TypeError crash)
+    return df.bfill().fillna(0)
