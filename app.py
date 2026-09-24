@@ -287,7 +287,8 @@ with tab3:
 with tab4:
     st.markdown("### Predictive Contributions & Transition Diagnostics")
     feat_imp = get_feature_importances(models, features)
-    st.dataframe(pd.DataFrame(list(feat_imp.items()), columns=["Feature", "Predictive Contribution"]), use_container_width=True)
+    feat_df = pd.DataFrame(list(feat_imp.items()), columns=["Feature", "Predictive Contribution"])
+    st.dataframe(feat_df.style.format({"Predictive Contribution": "{:.2%}"}), use_container_width=True)
     
     st.markdown("### Transition Diagnostic (T+4 → T+5)")
     trans_diag = compute_transition_diagnostics(prob_up_list, 4, 5)
