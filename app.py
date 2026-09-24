@@ -1,13 +1,16 @@
 # -*- coding: utf-8 -*-
 """
 Institutional Quant Workstation - Root Application Hub
-Imports modularized engines from src/ and renders the Streamlit Terminal with Live Twelve Data Feed.
+Imports modularized engines from src/ and renders the Streamlit Terminal with Live Twelve Data Feed & Multi-Model Ensemble Voting.
 """
 
 import streamlit as st
 import pandas as pd
 import numpy as np
 import requests
+
+from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
 
 # Import modular backend files from src/
 from src.validation import run_data_quality_gate
@@ -23,7 +26,7 @@ from src.visualization import plot_probability_curve
 # STREAMLIT PAGE CONFIGURATION & STYLING
 # ==============================================================================
 st.set_page_config(
-    page_title="Institutional Quant Terminal | 10-Candle Engine",
+    page_title="Institutional Quant Terminal | 10-Candle Ensemble Engine",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -69,8 +72,8 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("⚡ INSTITUTIONAL QUANT WORKSTATION: 10-CANDLE PROBABILISTIC ENGINE")
-st.markdown("**Terminal Status:** Live Feed Active (Twelve Data) | **Architecture:** Modular `src/` Pipeline")
+st.title("⚡ INSTITUTIONAL QUANT WORKSTATION: 10-CANDLE ENSEMBLE ENGINE")
+st.markdown("**Terminal Status:** Live Feed Active (Twelve Data) | **Engine:** Multi-Model Ensemble (GB + RF + LR)")
 
 # ==============================================================================
 # 1. LIVE DATA INGESTION (TWELVE DATA API WITH SAFE VOLUME HANDLING)
@@ -140,15 +143,21 @@ else:
     st.sidebar.success(f"Feed: {symbol} ({interval}) | DQ Gate: PASS ✅")
 
 # ==============================================================================
-# 2. HYPERPARAMETERS
+# 2. HYPERPARAMETERS & ENSEMBLE WEIGHTS
 # ==============================================================================
+st.sidebar.markdown("---")
+st.sidebar.header("2. Technical & Ensemble Weights")
 rsi_per = st.sidebar.slider("RSI Lookback Period", 3, 25, 14)
 col_f, col_s = st.sidebar.columns(2)
 macd_f = col_f.slider("MACD Fast", 3, 15, 12)
 macd_s = col_s.slider("MACD Slow", 10, 30, 26)
 atr_per = st.sidebar.slider("ATR Period", 5, 30, 14)
 neutral_band = st.sidebar.slider("Neutral Band Threshold", 0.0, 0.5, 0.33, 0.05)
-model_type = st.sidebar.selectbox("Quant Model Engine", ["Gradient Boosting", "Random Forest", "L2 Regularized Logistic"])
+
+st.sidebar.markdown("### Model Voting Weights")
+weight_gb = st.sidebar.slider("Gradient Boosting Weight", 0.0, 1.0, 0.4, 0.1)
+weight_rf = st.sidebar.slider("Random Forest Weight", 0.0, 1.0, 0.4, 0.1)
+weight_lr = st.sidebar.slider("L2 Logistic Weight", 0.0, 1.0, 0.2, 0.1)
 
 spread_ticks = st.sidebar.number_input("Spread (USD)", value=0.20, step=0.05)
 commission_pct = st.sidebar.number_input("Commission (%)", value=0.02, step=0.01) / 100.0
@@ -165,12 +174,15 @@ features = ['Log_Return', 'RSI', 'MACD', 'MACD_Hist', 'ATR', 'Realized_Vol']
 X = df_model[features]
 
 # ==============================================================================
-# 4. 10-CANDLE FORECAST GENERATION
+# 4. 10-CANDLE ENSEMBLE FORECAST GENERATION
 # ==============================================================================
 horizons = list(range(1, 11))
 prob_up, prob_down, prob_neutral, exp_returns, exp_ranges = [], [], [], [], []
 
-clf = get_forecasting_model(model_type)
+# Initialize core model engines for soft voting ensemble
+clf_gb = GradientBoostingClassifier(random_state=42)
+clf_rf = RandomForestClassifier(random_state=42)
+clf_lr = LogisticRegression(max_iter=1000, penalty='l2', solver='lbfgs')
 
 for h in horizons:
     y_h = df_model[f'Target_Dir_{h}']
@@ -178,10 +190,28 @@ for h in horizons:
     X_h, y_bin = X.values[valid_idx], (y_h[valid_idx] == 1).astype(int)
     
     if len(np.unique(y_bin)) > 1:
-        clf.fit(X_h, y_bin)
-        probs = clf.predict_proba(X.iloc[[-1]])[0]
-        p_up = probs[1] if len(probs) > 1 else 0.5
-        p_down = probs[0] if len(probs) > 1 else 0.5
+        # Fit models
+        clf_gb.fit(X_h, y_bin)
+        clf_rf.fit(X_h, y_bin)
+        clf_lr.fit(X_h, y_bin)
+        
+        # Extract predicted probabilities
+        p_gb = clf_gb.predict_proba(X.iloc[[-1]])[0]
+        p_rf = clf_rf.predict_proba(X.iloc[[-1]])[0]
+        p_lr = clf_lr.predict_proba(X.iloc[[-1]])[0]
+        
+        up_gb = p_gb[1] if len(p_gb) > 1 else 0.5
+        up_rf = p_rf[1] if len(p_rf) > 1 else 0.5
+        up_lr = p_lr[1] if len(p_lr) > 1 else 0.5
+        
+        # Compute Weighted Soft Voting Consensus
+        total_weight = weight_gb + weight_rf + weight_lr
+        if total_weight > 0:
+            p_up = (up_gb * weight_gb + up_rf * weight_rf + up_lr * weight_lr) / total_weight
+        else:
+            p_up = (up_gb + up_rf + up_lr) / 3.0
+            
+        p_down = 1.0 - p_up
     else:
         p_up, p_down = 0.5, 0.5
 
