@@ -31,13 +31,35 @@ st.markdown("""
     <style>
     .stApp { background-color: #0A0E17; color: #E2E8F0; font-family: 'Inter', sans-serif; }
     [data-testid="stSidebar"] { background-color: #131B2E; border-right: 1px solid #1E293B; }
+    
+    /* Enhanced Metric Cards: Expanded width, auto text-wrapping, fixed font size to prevent truncation */
     div[data-testid="stMetric"] {
-        background-color: #131B2E; border: 1px solid #1E293B;
-        padding: 15px 20px; border-radius: 6px;
+        background-color: #131B2E; 
+        border: 1px solid #1E293B;
+        padding: 12px 14px; 
+        border-radius: 6px;
+        min-height: 95px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
     }
-    div[data-testid="stMetric"] label { color: #94A3B8 !important; font-size: 0.75rem; text-transform: uppercase; }
-    div[data-testid="stMetric"] div[data-testid="stMetricValue"] { color: #F8FAFC !important; font-family: 'Courier New', Courier, monospace; }
+    div[data-testid="stMetric"] label { 
+        color: #94A3B8 !important; 
+        font-size: 0.70rem !important; 
+        text-transform: uppercase; 
+        letter-spacing: 0.05em;
+    }
+    div[data-testid="stMetric"] div[data-testid="stMetricValue"] { 
+        color: #F8FAFC !important; 
+        font-family: 'Courier New', Courier, monospace; 
+        font-size: 1.15rem !important;
+        white-space: normal !important;
+        overflow: visible !important;
+        text-overflow: clip !important;
+    }
+
     h1, h2, h3 { color: #F8FAFC; letter-spacing: -0.025em; }
+    
     .stTabs [data-baseweb="tab-list"] { gap: 8px; background-color: #0A0E17; }
     .stTabs [data-baseweb="tab"] {
         background-color: #131B2E; border: 1px solid #1E293B; border-radius: 4px; color: #94A3B8; font-weight: 600;
