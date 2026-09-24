@@ -1,16 +1,16 @@
-# -*- coding: utf-8 -*-
-"""
-Probability Calibration Engine
-"""
 import numpy as np
+from sklearn.isotonic import IsotonicRegression
 
-def calibrate_probabilities(raw_probs: np.ndarray, y_true: np.ndarray):
-    # Platt scaling linear approximation / logistic calibration
-    slope = 1.0
-    intercept = 0.0
-    calibrated = 1.0 / (1.0 + np.exp(-(slope * np.logit(np.clip(raw_probs, 1e-5, 1-1e-5)) + intercept))) if hasattr(np, 'logit') else raw_probs
-    return calibrated, slope, intercept
-
-def compute_calibration_metrics(raw_probs: np.ndarray, y_true: np.ndarray):
-    brier = np.mean((raw_probs - y_true) ** 2)
-    return {"Brier_Score": brier, "Log_Loss": 0.45, "ECE": 0.04}
+def calibrate_probabilities(raw_probs: np.ndarray, true_labels: np.ndarray):
+    ir = IsotonicRegression(out_of_bounds='clip')
+    try:
+        if len(np.unique(true_labels)) > 1:
+            ir.fit(raw_probs, true_labels)
+            calibrated = ir.predict(raw_probs)
+        else:
+            calibrated = raw_probs
+    except Exception:
+        calibrated = raw_probs
+    brier = np.mean((calibrated - true_labels) ** 2)
+    log_loss = -np.mean(true_labels * np.log(np.clip(calibrated, 1e-15, 1-1e-15)) + (1 - true_labels) * np.log(np.clip(1-calibrated, 1e-15, 1-1e-15)))
+    return calibrated, brier, log_loss
