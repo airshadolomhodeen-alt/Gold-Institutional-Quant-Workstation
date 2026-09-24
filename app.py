@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
 """
 Institutional Quant Workstation - Root Application Hub
-Imports modularized engines from src/ and renders the Streamlit Terminal with Live Twelve Data Feed & Multi-Model Ensemble Voting.
+Imports modularized engines from src/ and renders the Streamlit Terminal with:
+- Live Twelve Data Feed
+- Multi-Model Ensemble Voting (GB + RF + LR)
+- Confluence Equilibrium & Entry Filtering
 """
 
 import streamlit as st
@@ -26,7 +29,7 @@ from src.visualization import plot_probability_curve
 # STREAMLIT PAGE CONFIGURATION & STYLING
 # ==============================================================================
 st.set_page_config(
-    page_title="Institutional Quant Terminal | 10-Candle Ensemble Engine",
+    page_title="Institutional Quant Terminal | Confluence Ensemble Engine",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -72,8 +75,8 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("⚡ INSTITUTIONAL QUANT WORKSTATION: 10-CANDLE ENSEMBLE ENGINE")
-st.markdown("**Terminal Status:** Live Feed Active (Twelve Data) | **Engine:** Multi-Model Ensemble (GB + RF + LR)")
+st.title("⚡ INSTITUTIONAL QUANT WORKSTATION: CONFLUENCE ENSEMBLE ENGINE")
+st.markdown("**Terminal Status:** Live Feed Active (Twelve Data) | **Engine:** Multi-Model Ensemble + Confluence Scoring")
 
 # ==============================================================================
 # 1. LIVE DATA INGESTION (TWELVE DATA API WITH SAFE VOLUME HANDLING)
@@ -98,19 +101,16 @@ def fetch_twelve_data(sym, tf, size, api_key):
         if "values" in data:
             df_api = pd.DataFrame(data["values"])
             
-            # Map available columns safely (handles missing volume in forex/gold feeds)
             rename_map = {"datetime": "Time", "open": "Open", "high": "High", "low": "Low", "close": "Close"}
             if "volume" in df_api.columns:
                 rename_map["volume"] = "Volume"
                 
             df_api = df_api.rename(columns=rename_map)
             
-            # Convert OHLC to numeric
             for col in ["Open", "High", "Low", "Close"]:
                 if col in df_api.columns:
                     df_api[col] = pd.to_numeric(df_api[col], errors='coerce')
             
-            # Handle missing volume gracefully (default to 1.0 if not provided by API)
             if "Volume" in df_api.columns:
                 df_api["Volume"] = pd.to_numeric(df_api["Volume"], errors='coerce').fillna(0.0)
             else:
@@ -123,7 +123,6 @@ def fetch_twelve_data(sym, tf, size, api_key):
     except Exception as e:
         return None, str(e)
 
-# Fetch data from Twelve Data
 df_raw, err_msg = fetch_twelve_data(symbol, interval, outputsize, TWELVE_DATA_API_KEY)
 
 if df_raw is None or df_raw.empty:
@@ -132,7 +131,6 @@ if df_raw is None or df_raw.empty:
     prices = 2000 + np.cumsum(np.random.normal(0, 2, 500))
     df_raw = pd.DataFrame({"Time": dates, "Open": prices, "High": prices+1, "Low": prices-1, "Close": prices, "Volume": 1.0})
 
-# Run Data Quality Gate (from src/validation.py)
 dq_pass, dq_checks, df = run_data_quality_gate(df_raw)
 
 if not dq_pass:
@@ -154,10 +152,10 @@ macd_s = col_s.slider("MACD Slow", 10, 30, 26)
 atr_per = st.sidebar.slider("ATR Period", 5, 30, 14)
 neutral_band = st.sidebar.slider("Neutral Band Threshold", 0.0, 0.5, 0.33, 0.05)
 
-st.sidebar.markdown("### Model Voting Weights")
-weight_gb = st.sidebar.slider("Gradient Boosting Weight", 0.0, 1.0, 0.4, 0.1)
-weight_rf = st.sidebar.slider("Random Forest Weight", 0.0, 1.0, 0.4, 0.1)
-weight_lr = st.sidebar.slider("L2 Logistic Weight", 0.0, 1.0, 0.2, 0.1)
+st.sidebar.markdown("### Model Voting Weights (Macro Bias Focus)")
+weight_gb = st.sidebar.slider("Gradient Boosting Weight", 0.0, 1.0, 0.20, 0.05)
+weight_rf = st.sidebar.slider("Random Forest Weight", 0.0, 1.0, 0.30, 0.05)
+weight_lr = st.sidebar.slider("L2 Logistic Weight (Macro Anchor)", 0.0, 1.0, 0.50, 0.05)
 
 spread_ticks = st.sidebar.number_input("Spread (USD)", value=0.20, step=0.05)
 commission_pct = st.sidebar.number_input("Commission (%)", value=0.02, step=0.01) / 100.0
@@ -174,12 +172,11 @@ features = ['Log_Return', 'RSI', 'MACD', 'MACD_Hist', 'ATR', 'Realized_Vol']
 X = df_model[features]
 
 # ==============================================================================
-# 4. 10-CANDLE ENSEMBLE FORECAST GENERATION
+# 4. 10-CANDLE ENSEMBLE FORECAST GENERATION & CONFLUENCE
 # ==============================================================================
 horizons = list(range(1, 11))
 prob_up, prob_down, prob_neutral, exp_returns, exp_ranges = [], [], [], [], []
 
-# Initialize core model engines for soft voting ensemble
 clf_gb = GradientBoostingClassifier(random_state=42)
 clf_rf = RandomForestClassifier(random_state=42)
 clf_lr = LogisticRegression(max_iter=1000, penalty='l2', solver='lbfgs')
@@ -190,12 +187,10 @@ for h in horizons:
     X_h, y_bin = X.values[valid_idx], (y_h[valid_idx] == 1).astype(int)
     
     if len(np.unique(y_bin)) > 1:
-        # Fit models
         clf_gb.fit(X_h, y_bin)
         clf_rf.fit(X_h, y_bin)
         clf_lr.fit(X_h, y_bin)
         
-        # Extract predicted probabilities
         p_gb = clf_gb.predict_proba(X.iloc[[-1]])[0]
         p_rf = clf_rf.predict_proba(X.iloc[[-1]])[0]
         p_lr = clf_lr.predict_proba(X.iloc[[-1]])[0]
@@ -204,7 +199,6 @@ for h in horizons:
         up_rf = p_rf[1] if len(p_rf) > 1 else 0.5
         up_lr = p_lr[1] if len(p_lr) > 1 else 0.5
         
-        # Compute Weighted Soft Voting Consensus
         total_weight = weight_gb + weight_rf + weight_lr
         if total_weight > 0:
             p_up = (up_gb * weight_gb + up_rf * weight_rf + up_lr * weight_lr) / total_weight
@@ -215,7 +209,6 @@ for h in horizons:
     else:
         p_up, p_down = 0.5, 0.5
 
-    # Calibrate probabilities
     cal_up, _ = calibrate_probabilities(np.array([p_up]), np.array([1]))
     p_up = cal_up[0]
     p_down = 1.0 - p_up
@@ -238,15 +231,19 @@ forecast_df = pd.DataFrame({
     "Expected Range": exp_ranges
 })
 
-# Risk Evaluation
+# Risk Evaluation & Directional State
 max_prob = max(prob_up[-1], prob_down[-1])
 avg_win = df['ATR'].iloc[-1]
 avg_loss = df['ATR'].iloc[-1] * 0.9
 trading_state, ev = evaluate_trading_decision(max_prob, neutral_band, avg_win, avg_loss, spread_ticks, commission_pct, dq_pass)
 
-# Determine directional bias for the trade state label
 direction_bias = "BUY" if prob_up[-1] > prob_down[-1] else "SELL"
 display_trading_state = f"{direction_bias} ({trading_state})" if trading_state == "TRADEABLE" else trading_state
+
+# Calculate Confluence Equilibrium Index
+regime_score = 1.0 if current_regime == "TRENDING" else 0.5
+ev_score = 1.0 if ev > 0 else 0.0
+confluence_index = (max_prob * 0.5) + (regime_score * 0.3) + (ev_score * 0.2)
 
 # ==============================================================================
 # 5. DASHBOARD UI RENDERING
@@ -258,6 +255,10 @@ c2.metric("P(UP at t+10)", f"{prob_up[-1]*100:.1f}%")
 c3.metric("P(DOWN at t+10)", f"{prob_down[-1]*100:.1f}%")
 c4.metric("Current Regime", current_regime)
 c5.metric("Trading State", display_trading_state)
+
+# Confluence Scorecard Indicator Row
+st.markdown(f"**Institutional Confluence Equilibrium Index:** `{confluence_index * 100:.1f}%` *(Ensemble Conviction + Regime + EV Audit)*")
+st.progress(float(confluence_index))
 
 st.markdown("---")
 
@@ -276,3 +277,4 @@ with tab2:
 with tab3:
     st.write(f"**Net Expected Value after Costs:** ${ev:.2f}")
     st.write(f"**Decision Rule Triggered:** {trading_state}")
+    st.write(f"**Confluence Index Score:** {confluence_index*100:.1f}% (Threshold required for entry: >65.0%)")
