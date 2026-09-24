@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Institutional Quant Workstation - Root Application Hub (Refactored & Polished)
+Institutional Quant Terminal - Root Application Hub (Refactored with Predictive Regression)
 """
 
 import streamlit as st
@@ -15,13 +15,14 @@ from src.targets import create_multi_horizon_targets
 from src.volatility import compute_volatility_features
 from src.regime_models import detect_market_regime
 from src.forecasting_models import get_forecasting_models
-from src.calibration import calibrate_probabilities, compute_calibration_metrics
-from src.ensemble import aggregate_ensemble, compute_model_disagreement
+from src.prediction_models import generate_return_predictions
+from src.calibration import calibrate_probabilities
+from src.ensemble import aggregate_ensemble
 from src.path_forecast import compute_path_statistics
 from src.expected_value import compute_expected_values
 from src.risk_engine import evaluate_tradeability_gate
 from src.explainability import compute_transition_diagnostics, get_feature_importances
-from src.visualization import plot_probability_curve, plot_predictive_return_distribution
+from src.visualization import plot_probability_curve
 from src.backtest import run_walk_forward_simulation
 from src.config import Config
 
@@ -38,7 +39,6 @@ st.markdown("""
     <style>
     .stApp { background-color: #0A0E17; color: #F8FAFC; font-family: 'Inter', sans-serif; }
     [data-testid="stSidebar"] { background-color: #131B2E; border-right: 1px solid #1E293B; }
-    
     [data-testid="stSidebar"] label, [data-testid="stSidebar"] .stMarkdown { color: #E2E8F0 !important; }
 
     div[data-testid="stMetric"] {
@@ -78,7 +78,6 @@ st.markdown("""
         color: #0A0E17 !important; 
         font-weight: 700;
     }
-    
     p, span, label { color: #E2E8F0; }
     </style>
 """, unsafe_allow_html=True)
@@ -87,7 +86,7 @@ st.title("⚡ MULTI-HORIZON PROBABILISTIC MARKET FORECASTING & DECISION ENGINE")
 st.markdown("**Terminal Status:** Production Ready | **Architecture:** Leakage-Safe Walk-Forward Ensemble")
 
 # ==============================================================================
-# SIDEBAR PARAMETERS (Optimized Defaults to Suppress Noise)
+# SIDEBAR PARAMETERS
 # ==============================================================================
 st.sidebar.header("1. Feed & Parameters")
 symbol = st.sidebar.text_input("Asset Symbol", value="XAU/USD")
@@ -152,8 +151,10 @@ X = df_model[features]
 horizons = list(range(1, 11))
 prob_up_list, prob_down_list, prob_neutral_list = [], [], []
 exp_returns, exp_ranges, model_agreements, uncertainties = [], [], [], []
+lower_bounds, upper_bounds = [], []
 
 models = get_forecasting_models()
+return_predictions = generate_return_predictions(df_model, features, horizons)
 
 for h in horizons:
     y_h = df_model[f'Target_Dir_{h}']
@@ -170,7 +171,7 @@ for h in horizons:
             horizon_probs[name] = 0.5
 
     p_ens, disagreement = aggregate_ensemble(horizon_probs)
-    cal_up, cal_slope, cal_intercept = calibrate_probabilities(np.array([p_ens]), np.array([1]))
+    cal_up, _, _ = calibrate_probabilities(np.array([p_ens]), np.array([1]))
     p_up = cal_up[0]
     p_down = 1.0 - p_up
     p_neut = max(0.0, 1.0 - abs(p_up - p_down) - 0.2)
@@ -180,7 +181,12 @@ for h in horizons:
     prob_down_list.append(p_down / tot)
     prob_neutral_list.append(p_neut / tot)
     
-    exp_returns.append(df_model[f'Forward_Return_{h}'].mean() * (p_up - p_down))
+    # Regression prediction mapping
+    reg_data = return_predictions.get(h, {"Expected_Return": 0.0, "Lower_Bound": 0.0, "Upper_Bound": 0.0})
+    exp_returns.append(reg_data["Expected_Return"])
+    lower_bounds.append(reg_data["Lower_Bound"])
+    upper_bounds.append(reg_data["Upper_Bound"])
+    
     exp_ranges.append(df_model['ATR'].iloc[-1] * np.sqrt(h))
     model_agreements.append((1.0 - disagreement) * 100.0)
     uncertainties.append("LOW" if disagreement < 0.2 else ("MODERATE" if disagreement < 0.4 else "HIGH"))
@@ -193,12 +199,10 @@ tradeability_state, trade_reasons = evaluate_tradeability_gate(
 )
 
 # ==============================================================================
-# DASHBOARD UI RENDERING (TRADINGVIEW WIDGET INTEGRATION)
+# UI RENDERING
 # ==============================================================================
 st.subheader(f"📈 Interactive Market Feed: {symbol} ({interval})")
-
 tv_interval_map = {"15min": "15", "1h": "60", "4h": "240", "1day": "D"}
-tv_interval = tv_interval_map.get(interval, "60")
 tv_symbol = symbol.replace("/", "")
 
 tradingview_html = f"""
@@ -206,34 +210,20 @@ tradingview_html = f"""
   <div id="tradingview_widget" style="height:100%;width:100%"></div>
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
   <script type="text/javascript">
-  new TradingView.widget(
-  {{
-    "width": "100%",
-    "height": 500,
-    "symbol": "OANDA:{tv_symbol}",
-    "interval": "{tv_interval}",
-    "timezone": "Etc/UTC",
-    "theme": "dark",
-    "style": "1",
-    "locale": "en",
-    "toolbar_bg": "#131B2E",
-    "enable_publishing": false,
-    "hide_side_toolbar": false,
-    "allow_symbol_change": true,
-    "details": true,
-    "hotlist": true,
-    "calendar": true,
-    "container_id": "tradingview_widget"
-  }}
-  );
+  new TradingView.widget({{
+    "width": "100%", "height": 500, "symbol": "OANDA:{tv_symbol}",
+    "interval": "{tv_interval_map.get(interval, '60')}", "timezone": "Etc/UTC",
+    "theme": "dark", "style": "1", "locale": "en", "toolbar_bg": "#131B2E",
+    "enable_publishing": false, "hide_side_toolbar": false, "allow_symbol_change": true,
+    "details": true, "hotlist": true, "calendar": true, "container_id": "tradingview_widget"
+  }});
   </script>
 </div>
 """
 components.html(tradingview_html, height=520)
 
 st.markdown("---")
-
-st.subheader("🚨 NEXT 10-CANDLE PROBABILISTIC FORECAST PANEL")
+st.subheader("🚨 NEXT 10-CANDLE PROBABILISTIC & PREDICTIVE FORECAST PANEL")
 c1, c2, c3, c4, c5 = st.columns(5)
 c1.metric("Current Price", f"${df['Close'].iloc[-1]:.2f}")
 c2.metric("P(UP at T+10)", f"{prob_up_list[-1]*100:.1f}%")
@@ -244,11 +234,8 @@ c5.metric("Tradeability State", tradeability_state)
 st.markdown("---")
 
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
-    "📊 10-Candle Table", 
-    "📈 Probability Curve", 
-    "🛡️ Expected Value Audit", 
-    "🔍 Explainability & Diagnostics",
-    "🚀 Walk-Forward Backtest"
+    "📊 10-Candle Table", "📈 Probability Curve", "🛡️ Expected Value Audit", 
+    "🔍 Explainability & Diagnostics", "🚀 Walk-Forward Backtest"
 ])
 
 with tab1:
@@ -258,13 +245,14 @@ with tab1:
         "P(NEUTRAL)": prob_neutral_list,
         "P(DOWN)": prob_down_list,
         "Expected Return": exp_returns,
-        "Expected Range": exp_ranges,
+        "Lower Bound (95%)": lower_bounds,
+        "Upper Bound (95%)": upper_bounds,
         "Model Agreement": [f"{m:.1f}%" for m in model_agreements],
         "Uncertainty": uncertainties
     })
     st.dataframe(forecast_df.style.format({
         "P(UP)": "{:.2%}", "P(NEUTRAL)": "{:.2%}", "P(DOWN)": "{:.2%}",
-        "Expected Return": "{:.4f}", "Expected Range": "{:.2f}"
+        "Expected Return": "{:.4f}", "Lower Bound (95%)": "{:.4f}", "Upper Bound (95%)": "{:.4f}"
     }), use_container_width=True)
 
 with tab2:
@@ -282,7 +270,6 @@ with tab3:
         st.metric("Reward-to-Risk Ratio", f"{ev_results['RR_Ratio']:.2f}")
         st.metric("Max Favorable Excursion Prob", f"{path_stats['Prob_MFE_1ATR']:.1f}%")
         st.metric("Tradeability Status", tradeability_state)
-    
     if trade_reasons:
         st.warning(f"**Gate Rejection Reasons:** {', '.join(trade_reasons)}")
 
@@ -298,14 +285,11 @@ with tab4:
 
 with tab5:
     st.markdown("### 🚀 Historical Walk-Forward Simulation & Backtest")
-    st.markdown("Run a sequential walk-forward simulation across historical candles to test the performance of the current ensemble and thresholds.")
-    
     if st.button("Execute Walk-Forward Simulation Across Candles"):
         with st.spinner("Simulating institutional execution and tracking performance metrics..."):
             sim_results, metrics = run_walk_forward_simulation(
                 df_model, features, models, 
-                min_conviction=min_conviction, 
-                max_disagreement=max_disagreement,
+                min_conviction=min_conviction, max_disagreement=max_disagreement,
                 spread=spread, commission=commission
             )
             st.line_chart(sim_results.set_index("Time")["Capital"])
@@ -320,7 +304,5 @@ with tab5:
             csv_data = sim_results.to_csv(index=False).encode('utf-8')
             st.download_button(
                 label="📥 Download Simulation Trade Log (CSV)",
-                data=csv_data,
-                file_name="backtest_simulation_results.csv",
-                mime="text/csv",
+                data=csv_data, file_name="backtest_simulation_results.csv", mime="text/csv",
             )
