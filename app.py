@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
 """
 Institutional Quant Workstation - Root Application Hub
-Imports modularized engines from src/ and renders the Streamlit Terminal.
+Imports modularized engines from src/ and renders the Streamlit Terminal with Live Twelve Data Feed.
 """
 
 import streamlit as st
 import pandas as pd
 import numpy as np
+import requests
 
 # Import modular backend files from src/
 from src.validation import run_data_quality_gate
@@ -69,32 +70,48 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("⚡ INSTITUTIONAL QUANT WORKSTATION: 10-CANDLE PROBABILISTIC ENGINE")
-st.markdown("**Terminal Status:** Secure Connection Active | **Architecture:** Modular `src/` Pipeline")
+st.markdown("**Terminal Status:** Live Feed Active (Twelve Data) | **Architecture:** Modular `src/` Pipeline")
 
 # ==============================================================================
-# 1. DATA INGESTION & DATA QUALITY GATE
+# 1. LIVE DATA INGESTION (TWELVE DATA API)
 # ==============================================================================
-st.sidebar.header("1. Data & Execution Parameters")
-uploaded_file = st.sidebar.file_uploader("Upload Market Feed CSV Data", type=["csv", "txt"])
+st.sidebar.header("1. Live Data & Timeframe Parameters")
+symbol = st.sidebar.text_input("Asset Symbol", value="XAU/USD")
+interval = st.sidebar.selectbox("Timeframe", ["15min", "1h", "4h", "1day"], index=0)
+outputsize = st.sidebar.slider("Historical Candles", 100, 1000, 500)
 
-@st.cache_data
-def load_data(file_bytes=None):
-    if file_bytes is not None:
-        content = file_bytes.getvalue().decode("utf-8", errors="ignore")
-        lines = content.splitlines()
-        rows = []
-        for line in lines[1:]:
-            parts = line.split("\t") if "\t" in line else line.split(",")
-            if len(parts) >= 6:
-                rows.append([parts[0].strip().replace('"', ""), parts[1].strip(), parts[2].strip(), parts[3].strip(), parts[4].strip(), parts[-1].strip()])
-        return pd.DataFrame(rows, columns=["Time", "Open", "High", "Low", "Close", "Volume"])
-    else:
-        # Fallback dummy frame for immediate UI testing if no file uploaded
-        dates = pd.date_range(end=pd.Timestamp.now(), periods=500, freq='15min')
-        prices = 2000 + np.cumsum(np.random.normal(0, 2, 500))
-        return pd.DataFrame({"Time": dates, "Open": prices, "High": prices+1, "Low": prices-1, "Close": prices, "Volume": 500})
+TWELVE_DATA_API_KEY = "32b6a749e8c14835b95b8a9c271eec95"
 
-df_raw = load_data(uploaded_file)
+@st.cache_data(ttl=300)
+def fetch_twelve_data(sym, tf, size, api_key):
+    url = f"https://api.twelvedata.com/time_series?symbol={sym}&interval={tf}&outputsize={size}&apikey={api_key}&format=JSON"
+    try:
+        response = requests.get(url)
+        data = response.json()
+        
+        if "code" in data and data["code"] != 200:
+            return None, data.get("message", "API Error")
+            
+        if "values" in data:
+            df_api = pd.DataFrame(data["values"])
+            df_api = df_api.rename(columns={"datetime": "Time", "open": "Open", "high": "High", "low": "Low", "close": "Close", "volume": "Volume"})
+            for col in ["Open", "High", "Low", "Close", "Volume"]:
+                df_api[col] = pd.to_numeric(df_api[col], errors='coerce')
+            df_api = df_api.sort_values("Time").reset_index(drop=True)
+            return df_api, None
+        else:
+            return None, "No values found in response."
+    except Exception as e:
+        return None, str(e)
+
+# Fetch data from Twelve Data
+df_raw, err_msg = fetch_twelve_data(symbol, interval, outputsize, TWELVE_DATA_API_KEY)
+
+if df_raw is None or df_raw.empty:
+    st.error(f"🚨 Twelve Data Connection Failed: {err_msg}. Falling back to simulation frame.")
+    dates = pd.date_range(end=pd.Timestamp.now(), periods=500, freq='15min')
+    prices = 2000 + np.cumsum(np.random.normal(0, 2, 500))
+    df_raw = pd.DataFrame({"Time": dates, "Open": prices, "High": prices+1, "Low": prices-1, "Close": prices, "Volume": 500})
 
 # Run Data Quality Gate (from src/validation.py)
 dq_pass, dq_checks, df = run_data_quality_gate(df_raw)
@@ -104,7 +121,7 @@ if not dq_pass:
     st.write(dq_checks)
     st.stop()
 else:
-    st.sidebar.success("Data Quality Gate: PASS ✅")
+    st.sidebar.success(f"Feed: {symbol} ({interval}) | DQ Gate: PASS ✅")
 
 # ==============================================================================
 # 2. HYPERPARAMETERS
@@ -184,7 +201,7 @@ trading_state, ev = evaluate_trading_decision(max_prob, neutral_band, avg_win, a
 # ==============================================================================
 # 5. DASHBOARD UI RENDERING
 # ==============================================================================
-st.subheader("🚨 NEXT 10-CANDLE FORECAST PANEL")
+st.subheader(f"🚨 NEXT 10-CANDLE FORECAST PANEL ({symbol} - {interval})")
 c1, c2, c3, c4, c5 = st.columns(5)
 c1.metric("Current Price", f"${df['Close'].iloc[-1]:.2f}")
 c2.metric("P(UP at t+10)", f"{prob_up[-1]*100:.1f}%")
