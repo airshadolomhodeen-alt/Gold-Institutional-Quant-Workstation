@@ -186,17 +186,14 @@ for h in horizons:
     for name, model in models.items():
         try:
             model.fit(X_s1, y_bin_s1)
-            # Evaluate against Stage 2 (PRE_SIM_2) for parameter tuning / calibration check
             X_s2 = df_stage2[features].values if len(df_stage2) > 0 else X_s1
             p_s2 = model.predict_proba(X_s2)[-1] if len(X_s2) > 0 else [0.5, 0.5]
             horizon_probs[name] = p_s2[1] if len(p_s2) > 1 else 0.5
         except Exception:
             horizon_probs[name] = 0.5
 
-    # Ensemble Aggregation
     p_ens, disagreement = aggregate_ensemble(horizon_probs)
     
-    # Stage 3 Final Simulation (FINAL_SIM) Isotonic Probability Calibration & Confidence Curve
     y_h_s3 = df_stage3[f'Target_Dir_{h}'] if len(df_stage3) > 0 else df_model[f'Target_Dir_{h}']
     y_true_dummy = np.array([1 if len(y_h_s3) > 0 and y_h_s3.iloc[-1] == 1 else 0])
     
@@ -229,7 +226,6 @@ tradeability_state, trade_reasons = evaluate_tradeability_gate(
     min_conviction=min_conviction, max_disagreement=max_disagreement
 )
 
-# Simulation Case metrics & Partition calculations
 stage1_cases = int(sim_N * 0.60)
 stage2_cases = int(sim_N * 0.20)
 stage3_cases = sim_N - stage1_cases - stage2_cases
@@ -289,7 +285,7 @@ c5.metric("Tradeability State", tradeability_state)
 st.markdown("---")
 
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
-    "📊 10-Candle Table", "📈 Probability Curve", "🛡️ Expected Value Audit", 
+    "📊 10-Candle Table", "📈 Probability Curve", "🛡️ Expected Value & Entry Plan", 
     "🔍 Forecast Quality & Explainability", "🚀 Walk-Forward Backtest"
 ])
 
@@ -324,7 +320,6 @@ with tab3:
     st.markdown("---")
     
     if tradeability_state == "TRADEABLE":
-        st.markdown(f"### 🎯 ENTRY PLAN (Verified Tradeable) | Source: `{casenum_id}` [FINAL_SIM]")
         current_close = df['Close'].iloc[-1]
         atr_val = df_model['ATR'].iloc[-1]
         
@@ -333,33 +328,43 @@ with tab3:
         
         if direction == "LONG":
             tp1, tp2, sl = current_close + atr_val, current_close + (atr_val * 2), current_close - atr_val
+            tp1_pts, tp2_pts, sl_pts = f"+{atr_val:.1f} pts", f"+{atr_val*2:.1f} pts", f"-{atr_val:.1f} pts"
         else:
             tp1, tp2, sl = current_close - atr_val, current_close - (atr_val * 2), current_close + atr_val
+            tp1_pts, tp2_pts, sl_pts = f"-{atr_val:.1f} pts", f"-{atr_val*2:.1f} pts", f"+{atr_val:.1f} pts"
             
         risk = abs(current_close - sl)
         reward_tp1 = abs(tp1 - current_close)
         rr_ratio = reward_tp1 / risk if risk > 0 else 0.0
         cal_success = (prob_up_list[-1] if direction == "LONG" else prob_down_list[-1]) * 100
 
-        exec_col1, exec_col2, exec_col3 = st.columns(3)
-        with exec_col1:
-            st.metric("Trade Direction", direction)
-            st.metric("Reference Entry", f"${current_close:.2f}")
-            st.metric("$CASENUM Origin", casenum_id)
-        with exec_col2:
-            st.metric("Take Profit 1 / 2", f"${tp1:.2f} /${tp2:.2f}")
-            st.metric("Stop Loss (SL)", f"${sl:.2f}")
-            st.metric("Partition Source", "FINAL_SIM [Stage 3]")
-        with exec_col3:
-            st.metric("Risk : Reward", f"1 : {rr_ratio:.2f}")
-            st.metric("Calibrated P(Success)", f"{cal_success:.1f}%")
-            st.metric("Net Expected Value", f"${ev_results['Net_EV']:.2f}")
-            
-        st.success("✅ **Gate Status:** TRADEABLE — Passed 3-stage simulation conviction rules.")
+        # PART 40 FORMATTED ENTRY PLAN LAYER
+        st.markdown(f"""
+        ```text
+        ENTRY PLAN
+        Direction             : {direction}
+        Entry                 : {current_close:.1f}
+        TP1                   : {tp1:.1f}    ({tp1_pts})
+        TP2                   : {tp2:.1f}    ({tp2_pts})
+        SL                    : {sl:.1f}    ({sl_pts})
+        R:R                   : 1 : {rr_ratio:.2f}  (TP1)
+        Calibrated P(Success) : {cal_success:.1f}%
+        Net Expected Value    : {ev_results['Net_EV']:+.1f} points (after costs)
+        Tradeability          : TRADEABLE (passed all gates)
+        Partition Source      : FINAL_SIM ($CASENUM = {casenum_id.replace('CASENUM-', '')})
+        ```
+        """)
+        st.success("✅ **Gate Status:** TRADEABLE — Execution plan generated from FINAL_SIM partition.")
     else:
-        st.warning(f"🚫 **Execution Plan Suppressed (NO-TRADE State)** | Origin: `{casenum_id}` [FINAL_SIM]")
-        for reason in (trade_reasons or ["Insufficient edge or high model disagreement."]):
-            st.markdown(f"- ⚠️ {reason}")
+        st.markdown(f"""
+        ```text
+        ENTRY PLAN SUPPRESSED
+        Tradeability          : NO-TRADE
+        Reasons               : {", ".join(trade_reasons or ["Insufficient edge or high model disagreement."])}
+        Partition Source      : FINAL_SIM ($CASENUM = {casenum_id.replace('CASENUM-', '')})
+        ```
+        """)
+        st.warning("🚫 **Execution Plan Suppressed (NO-TRADE State)** — Failed conviction, EV, or model agreement thresholds.")
 
 with tab4:
     st.markdown("### 🔍 Forecast Quality Audit & Diagnostics")
