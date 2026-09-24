@@ -38,10 +38,8 @@ st.markdown("""
     .stApp { background-color: #0A0E17; color: #F8FAFC; font-family: 'Inter', sans-serif; }
     [data-testid="stSidebar"] { background-color: #131B2E; border-right: 1px solid #1E293B; }
     
-    /* Sidebar text clarity */
     [data-testid="stSidebar"] label, [data-testid="stSidebar"] .stMarkdown { color: #E2E8F0 !important; }
 
-    /* Enhanced Metric Cards */
     div[data-testid="stMetric"] {
         background-color: #131B2E; 
         border: 1px solid #334155;
@@ -65,7 +63,6 @@ st.markdown("""
 
     h1, h2, h3 { color: #F8FAFC !important; letter-spacing: -0.025em; }
     
-    /* Tab Styling: High visibility unselected and active states */
     .stTabs [data-baseweb="tab-list"] { gap: 8px; background-color: #0A0E17; }
     .stTabs [data-baseweb="tab"] {
         background-color: #1E293B !important; 
@@ -89,7 +86,7 @@ st.title("⚡ MULTI-HORIZON PROBABILISTIC MARKET FORECASTING & DECISION ENGINE")
 st.markdown("**Terminal Status:** Production Ready | **Architecture:** Leakage-Safe Walk-Forward Ensemble")
 
 # ==============================================================================
-# SIDEBAR PARAMETERS
+# SIDEBAR PARAMETERS (Optimized Defaults to Suppress Noise)
 # ==============================================================================
 st.sidebar.header("1. Feed & Parameters")
 symbol = st.sidebar.text_input("Asset Symbol", value="XAU/USD")
@@ -102,8 +99,8 @@ commission = st.sidebar.number_input("Commission (%)", value=0.02, step=0.01) / 
 slippage = st.sidebar.number_input("Slippage Cost", value=0.05, step=0.01)
 
 st.sidebar.markdown("### 3. Tradeability Gate Thresholds")
-min_conviction = st.sidebar.slider("Min Probability Conviction", 0.50, 0.80, 0.55, 0.01)
-max_disagreement = st.sidebar.slider("Max Model Disagreement (%)", 10.0, 50.0, 30.0, 5.0)
+min_conviction = st.sidebar.slider("Min Probability Conviction", 0.50, 0.80, 0.60, 0.01)
+max_disagreement = st.sidebar.slider("Max Model Disagreement (%)", 10.0, 50.0, 25.0, 5.0)
 
 TWELVE_DATA_API_KEY = "32b6a749e8c14835b95b8a9c271eec95"
 
@@ -151,7 +148,6 @@ df_model = df.dropna().copy()
 features = ['Log_Return', 'RSI', 'MACD', 'MACD_Hist', 'ATR', 'Realized_Vol', 'EWMA_Vol']
 X = df_model[features]
 
-# Multi-Horizon Forecasting Engine
 horizons = list(range(1, 11))
 prob_up_list, prob_down_list, prob_neutral_list = [], [], []
 exp_returns, exp_ranges, model_agreements, uncertainties = [], [], [], []
@@ -188,7 +184,6 @@ for h in horizons:
     model_agreements.append((1.0 - disagreement) * 100.0)
     uncertainties.append("LOW" if disagreement < 0.2 else ("MODERATE" if disagreement < 0.4 else "HIGH"))
 
-# Path & Expected Value Evaluation
 path_stats = compute_path_statistics(df_model, horizons)
 ev_results = compute_expected_values(prob_up_list[-1], prob_down_list[-1], exp_returns[-1], spread, commission, slippage, df_model['ATR'].iloc[-1])
 tradeability_state, trade_reasons = evaluate_tradeability_gate(
@@ -199,6 +194,12 @@ tradeability_state, trade_reasons = evaluate_tradeability_gate(
 # ==============================================================================
 # DASHBOARD UI RENDERING
 # ==============================================================================
+st.subheader(f"📈 Real-Time Price Action: {symbol} ({interval})")
+price_chart_df = df_raw.set_index("Time")[["Close"]]
+st.line_chart(price_chart_df, use_container_width=True)
+
+st.markdown("---")
+
 st.subheader("🚨 NEXT 10-CANDLE PROBABILISTIC FORECAST PANEL")
 c1, c2, c3, c4, c5 = st.columns(5)
 c1.metric("Current Price", f"${df['Close'].iloc[-1]:.2f}")
@@ -280,7 +281,7 @@ with tab5:
             col1, col2, col3, col4 = st.columns(4)
             col1.metric("Final Capital", f"${metrics['Final_Equity']:,.2f}")
             col2.metric("Total Return", f"{metrics['Total_Return_Pct']:+.2f}%")
-            col3.metric("Max Drawdown", f"${metrics['Max_Drawdown_Pct']:.2f}%")
+            col3.metric("Max Drawdown", f"{metrics['Max_Drawdown_Pct']:.2f}%")
             col4.metric("Win Rate", f"{metrics['Win_Rate']:.1f}% ({metrics['Total_Trades']} trades)")
             
             csv_data = sim_results.to_csv(index=False).encode('utf-8')
