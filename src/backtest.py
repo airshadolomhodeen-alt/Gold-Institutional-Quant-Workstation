@@ -49,7 +49,7 @@ def run_walk_forward_simulation(df: pd.DataFrame, features: list, models: dict,
         atr = current_row['ATR'].values[0]
         
         gross_edge = abs(p_up - 0.5) * atr
-        total_costs = spread + (close_price * commission_pct)
+        total_costs = spread + (close_price * commission)
         net_ev = gross_edge - (total_costs * 0.1)  # Scaled friction weight for simulation
         
         tradeability, _ = evaluate_tradeability_gate(
@@ -63,7 +63,7 @@ def run_walk_forward_simulation(df: pd.DataFrame, features: list, models: dict,
         
         if trade_taken:
             direction = 1 if p_up > 0.5 else -1
-            pnl = direction * actual_return * capital - (spread + (capital * commission_pct))
+            pnl = direction * actual_return * capital - (spread + (capital * commission))
             capital += pnl
             trades.append(pnl)
             
