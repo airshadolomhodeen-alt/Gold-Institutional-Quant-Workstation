@@ -37,4 +37,5 @@ def compute_features(df: pd.DataFrame, rsi_per: int, macd_f: int, macd_s: int, a
     # Realized Volatility
     df['Realized_Vol'] = df['Log_Return'].rolling(window=20).std() * np.sqrt(252)
     
-    return df.fillna(method='bfill').fillna(0.0)
+    # Updated to modern pandas bfill syntax
+    return df.bfill().fillna(0.0)
