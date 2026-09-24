@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Institutional Quant Terminal - Three-Stage Cumulative Simulation-Driven Production Hub
-Enhanced with Quantitative Microstructure & Point Process Features (Velu, Hardy, & Nehren)
+Enhanced with Quantitative Microstructure, Hawkes Intensity, and 60/20/20 Partitioning
 """
 
 import streamlit as st
@@ -85,7 +85,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("⚡ THREE-STAGE SIMULATION-DRIVEN PROBABILISTIC FORECASTING ENGINE")
-st.markdown("**Terminal Status:** Production Ready | **Architecture:** Microstructure-Enhanced 60/20/20 Cumulative Partitioning")
+st.markdown("**Terminal Status:** Production Ready | **Architecture:** 60/20/20 Cumulative Partitioning & Confidence Curve Validation")
 
 # ==============================================================================
 # SIDEBAR PARAMETERS
@@ -100,7 +100,7 @@ st.sidebar.header("2. Execution Costs & Market Impact")
 spread = st.sidebar.number_input("Spread Cost", value=0.20, step=0.05)
 commission = st.sidebar.number_input("Commission (%)", value=0.02, step=0.01) / 100.0
 slippage = st.sidebar.number_input("Slippage Cost", value=0.05, step=0.01)
-use_market_impact = st.sidebar.checkbox("Dynamic Impact Model (Ch. 9)", value=True)
+use_market_impact = st.sidebar.checkbox("Dynamic Impact Model", value=True)
 
 st.sidebar.markdown("### 3. Tradeability Gate Thresholds")
 min_conviction = st.sidebar.slider("Min Probability Conviction", 0.50, 0.80, 0.53, 0.01)
@@ -146,7 +146,7 @@ if not dq_pass:
 df = compute_features(df, Config.RSI_PERIOD, Config.MACD_FAST, Config.MACD_SLOW, Config.ATR_PERIOD)
 df = compute_volatility_features(df)
 
-# Quantitative Microstructure Additions: Order Flow Imbalance (OFI) & Hawkes Intensity Proxy
+# Quantitative Microstructure Features
 df['Price_Change'] = df['Close'].diff().fillna(0)
 df['Volume_Sign'] = np.where(df['Price_Change'] > 0, 1, np.where(df['Price_Change'] < 0, -1, 0))
 df['OFI'] = (df['Volume'] * df['Volume_Sign']).rolling(window=5).mean().fillna(0)
@@ -228,8 +228,6 @@ for h in horizons:
     uncertainties.append("LOW" if disagreement < 0.2 else ("MODERATE" if disagreement < 0.4 else "HIGH"))
 
 path_stats = compute_path_statistics(df_model, horizons)
-
-# Dynamic Market Impact Adjustment (Ch. 9)
 effective_slippage = slippage * (1.0 + 0.1 * df_model['Hawkes_Intensity'].iloc[-1]) if use_market_impact else slippage
 ev_results = compute_expected_values(prob_up_list[-1], prob_down_list[-1], exp_returns[-1], spread, commission, effective_slippage, df_model['ATR'].iloc[-1])
 
@@ -318,7 +316,7 @@ with tab2:
     st.pyplot(fig)
 
 with tab3:
-    st.markdown("### 🛡️ Expected Value & Market Impact Audit")
+    st.markdown("### 🛡️ Expected Value & Risk Audit")
     col_a, col_b = st.columns(2)
     with col_a:
         st.metric("Gross Expected Value", f"${ev_results['Gross_EV']:.2f}")
@@ -326,7 +324,7 @@ with tab3:
         st.metric("Net Expected Value", f"${ev_results['Net_EV']:.2f}")
     with col_b:
         st.metric("Reward-to-Risk Ratio (R:R)", f"1 : {ev_results['RR_Ratio']:.2f}")
-        st.metric("Effective Slippage (Impact)", f"${effective_slippage:.3f}")
+        st.metric("Effective Slippage", f"${effective_slippage:.3f}")
         st.metric("Tradeability Status", tradeability_state)
 
     st.markdown("---")
@@ -360,7 +358,7 @@ with tab3:
         SL                     : {sl:.1f}    ({sl_pts})
         R:R                    : 1 : {rr_ratio:.2f}  (TP1)
         Calibrated P(Success)  : {cal_success:.1f}%
-        Net Expected Value     : {ev_results['Net_EV']:+.1f} points (after impact costs)
+        Net Expected Value     : {ev_results['Net_EV']:+.1f} points (after costs)
         Tradeability           : TRADEABLE (passed all gates)
         Partition Source       : FINAL_SIM ($CASENUM = {casenum_id.replace('CASENUM-', '')})
         ```
