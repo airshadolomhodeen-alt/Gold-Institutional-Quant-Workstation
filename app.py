@@ -214,6 +214,10 @@ avg_win = df['ATR'].iloc[-1]
 avg_loss = df['ATR'].iloc[-1] * 0.9
 trading_state, ev = evaluate_trading_decision(max_prob, neutral_band, avg_win, avg_loss, spread_ticks, commission_pct, dq_pass)
 
+# Determine directional bias for the trade state label
+direction_bias = "BUY" if prob_up[-1] > prob_down[-1] else "SELL"
+display_trading_state = f"{direction_bias} ({trading_state})" if trading_state == "TRADEABLE" else trading_state
+
 # ==============================================================================
 # 5. DASHBOARD UI RENDERING
 # ==============================================================================
@@ -223,7 +227,7 @@ c1.metric("Current Price", f"${df['Close'].iloc[-1]:.2f}")
 c2.metric("P(UP at t+10)", f"{prob_up[-1]*100:.1f}%")
 c3.metric("P(DOWN at t+10)", f"{prob_down[-1]*100:.1f}%")
 c4.metric("Current Regime", current_regime)
-c5.metric("Trading State", trading_state)
+c5.metric("Trading State", display_trading_state)
 
 st.markdown("---")
 
