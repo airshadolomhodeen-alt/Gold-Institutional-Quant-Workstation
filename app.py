@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Institutional Quant Terminal - Three-Stage Cumulative Simulation-Driven Production Hub
-Enhanced with Quantitative Microstructure, Hawkes Intensity, 60/20/20 Partitioning, and Persistent TradingView State
+Enhanced with Quantitative Microstructure, Hawkes Intensity, 60/20/20 Partitioning, and TradingView Toolbar Controls
 """
 
 import streamlit as st
@@ -266,15 +266,15 @@ st.subheader(f"📈 Interactive Market Feed: {symbol} ({interval}) | Origin: `{c
 tv_interval_map = {"15min": "15", "1h": "60", "4h": "240", "1day": "D"}
 tv_symbol = symbol.replace("/", "")
 
-# Updated TradingView widget configuration with Anchored Volume Profile and persistent autosave state
+# Updated TradingView widget configuration with expanded toolset, image snapshots, and Anchored Volume Profile
 tradingview_html = f"""
-<div class="tradingview-widget-container" style="height:450px;width:100%">
+<div class="tradingview-widget-container" style="height:500px;width:100%">
   <div id="tradingview_widget" style="height:100%;width:100%"></div>
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
   <script type="text/javascript">
   new TradingView.widget({{
     "width": "100%", 
-    "height": 450, 
+    "height": 500, 
     "symbol": "OANDA:{tv_symbol}",
     "interval": "{tv_interval_map.get(interval, '60')}", 
     "timezone": "Etc/UTC",
@@ -285,11 +285,11 @@ tradingview_html = f"""
     "enable_publishing": false, 
     "hide_side_toolbar": false, 
     "allow_symbol_change": true,
-    "details": false, 
+    "save_image": true,
+    "details": true, 
     "hotlist": false, 
     "calendar": false, 
     "container_id": "tradingview_widget",
-    "autosave_id": "quant_terminal_chart_state_{tv_symbol}",
     "studies": [
       "AnchoredVolumeProfile@tv-basicstudies"
     ]
@@ -297,7 +297,7 @@ tradingview_html = f"""
   </script>
 </div>
 """
-components.html(tradingview_html, height=470)
+components.html(tradingview_html, height=520)
 
 st.markdown("---")
 st.subheader("🚨 NEXT 10-CANDLE FORECAST (FROM FINAL SIMULATION: T+1 → T+10)")
