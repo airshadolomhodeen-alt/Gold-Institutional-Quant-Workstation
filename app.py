@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Institutional Quant Terminal - Root Application Hub (Refactored with Predictive Regression)
+Institutional Quant Terminal - Root Application Hub (Refactored with Automated Audit Logging)
 """
 
 import streamlit as st
@@ -24,6 +24,7 @@ from src.risk_engine import evaluate_tradeability_gate
 from src.explainability import compute_transition_diagnostics, get_feature_importances
 from src.visualization import plot_probability_curve
 from src.backtest import run_walk_forward_simulation
+from src.logger import log_current_predictions
 from src.config import Config
 
 # ==============================================================================
@@ -181,7 +182,6 @@ for h in horizons:
     prob_down_list.append(p_down / tot)
     prob_neutral_list.append(p_neut / tot)
     
-    # Regression prediction mapping
     reg_data = return_predictions.get(h, {"Expected_Return": 0.0, "Lower_Bound": 0.0, "Upper_Bound": 0.0})
     exp_returns.append(reg_data["Expected_Return"])
     lower_bounds.append(reg_data["Lower_Bound"])
@@ -196,6 +196,17 @@ ev_results = compute_expected_values(prob_up_list[-1], prob_down_list[-1], exp_r
 tradeability_state, trade_reasons = evaluate_tradeability_gate(
     prob_up_list[-1], ev_results['Net_EV'], model_agreements[-1], dq_pass, uncertainties[-1],
     min_conviction=min_conviction, max_disagreement=max_disagreement
+)
+
+# Automatically record current prediction session to audit trail
+log_current_predictions(
+    symbol=symbol,
+    interval=interval,
+    current_price=df['Close'].iloc[-1],
+    horizons=horizons,
+    prob_up_list=prob_up_list,
+    prob_down_list=prob_down_list,
+    return_predictions=return_predictions
 )
 
 # ==============================================================================
