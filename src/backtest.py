@@ -8,7 +8,7 @@ from src.risk_engine import evaluate_tradeability_gate
 
 def run_walk_forward_simulation(df: pd.DataFrame, features: list, models: dict, 
                                 min_conviction: float = 0.52, max_disagreement: float = 35.0,
-                                spread: float = 0.20, commission_pct: float = 0.0002):
+                                spread: float = 0.20, commission: float = 0.0002):
     """
     Simulates sequential trade execution with price-scaled expected values and metrics.
     """
