@@ -21,6 +21,7 @@ from src.expected_value import compute_expected_values
 from src.risk_engine import evaluate_tradeability_gate
 from src.explainability import compute_transition_diagnostics, get_feature_importances
 from src.visualization import plot_probability_curve, plot_predictive_return_distribution
+from src.backtest import run_walk_forward_simulation
 from src.config import Config
 
 # ==============================================================================
@@ -99,6 +100,10 @@ st.sidebar.header("2. Execution Costs & Risk")
 spread = st.sidebar.number_input("Spread Cost", value=0.20, step=0.05)
 commission = st.sidebar.number_input("Commission (%)", value=0.02, step=0.01) / 100.0
 slippage = st.sidebar.number_input("Slippage Cost", value=0.05, step=0.01)
+
+st.sidebar.markdown("### 3. Tradeability Gate Thresholds")
+min_conviction = st.sidebar.slider("Min Probability Conviction", 0.50, 0.80, 0.55, 0.01)
+max_disagreement = st.sidebar.slider("Max Model Disagreement (%)", 10.0, 50.0, 30.0, 5.0)
 
 TWELVE_DATA_API_KEY = "32b6a749e8c14835b95b8a9c271eec95"
 
@@ -186,7 +191,10 @@ for h in horizons:
 # Path & Expected Value Evaluation
 path_stats = compute_path_statistics(df_model, horizons)
 ev_results = compute_expected_values(prob_up_list[-1], prob_down_list[-1], exp_returns[-1], spread, commission, slippage, df_model['ATR'].iloc[-1])
-tradeability_state, trade_reasons = evaluate_tradeability_gate(prob_up_list[-1], ev_results['Net_EV'], model_agreements[-1], dq_pass, uncertainties[-1])
+tradeability_state, trade_reasons = evaluate_tradeability_gate(
+    prob_up_list[-1], ev_results['Net_EV'], model_agreements[-1], dq_pass, uncertainties[-1],
+    min_conviction=min_conviction, max_disagreement=max_disagreement
+)
 
 # ==============================================================================
 # DASHBOARD UI RENDERING
@@ -201,7 +209,13 @@ c5.metric("Tradeability State", tradeability_state)
 
 st.markdown("---")
 
-tab1, tab2, tab3, tab4 = st.tabs(["📊 10-Candle Table", "📈 Probability Curve", "🛡️ Expected Value Audit", "🔍 Explainability & Diagnostics"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    "📊 10-Candle Table", 
+    "📈 Probability Curve", 
+    "🛡️ Expected Value Audit", 
+    "🔍 Explainability & Diagnostics",
+    "🚀 Walk-Forward Backtest"
+])
 
 with tab1:
     forecast_df = pd.DataFrame({
@@ -247,3 +261,32 @@ with tab4:
     trans_diag = compute_transition_diagnostics(prob_up_list, 4, 5)
     st.write(f"**Probability Delta:** {trans_diag['Delta']:+.2f}%")
     st.write(f"**Primary Contributing Feature:** {trans_diag['Top_Feature']}")
+
+with tab5:
+    st.markdown("### 🚀 Historical Walk-Forward Simulation & Backtest")
+    st.markdown("Run a sequential walk-forward simulation across historical candles to test the performance of the current ensemble and thresholds.")
+    
+    if st.button("Execute Walk-Forward Simulation Across Candles"):
+        with st.spinner("Simulating institutional execution and tracking performance metrics..."):
+            sim_results, metrics = run_walk_forward_simulation(
+                df_model, features, models, 
+                min_conviction=min_conviction, 
+                max_disagreement=max_disagreement,
+                spread=spread, commission=commission
+            )
+            st.line_chart(sim_results.set_index("Time")["Capital"])
+            
+            st.markdown("### 📊 Backtest Performance Summary")
+            col1, col2, col3, col4 = st.columns(4)
+            col1.metric("Final Capital", f"${metrics['Final_Equity']:,.2f}")
+            col2.metric("Total Return", f"{metrics['Total_Return_Pct']:+.2f}%")
+            col3.metric("Max Drawdown", f"${metrics['Max_Drawdown_Pct']:.2f}%")
+            col4.metric("Win Rate", f"{metrics['Win_Rate']:.1f}% ({metrics['Total_Trades']} trades)")
+            
+            csv_data = sim_results.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="📥 Download Simulation Trade Log (CSV)",
+                data=csv_data,
+                file_name="backtest_simulation_results.csv",
+                mime="text/csv",
+            )
