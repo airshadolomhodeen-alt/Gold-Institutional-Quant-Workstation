@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Institutional Quant Terminal - Leak-Proof Production Hub
+Institutional Quant Terminal - Production Hub
 """
 
 import streamlit as st
