@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Institutional Quant Terminal - Three-Stage Cumulative Simulation-Driven Production Hub
-Enhanced with Quantitative Microstructure, Hawkes Intensity, and 60/20/20 Partitioning
+Enhanced with Quantitative Microstructure, Hawkes Intensity, 60/20/20 Partitioning, and Persistent TradingView State
 """
 
 import streamlit as st
@@ -266,17 +266,33 @@ st.subheader(f"📈 Interactive Market Feed: {symbol} ({interval}) | Origin: `{c
 tv_interval_map = {"15min": "15", "1h": "60", "4h": "240", "1day": "D"}
 tv_symbol = symbol.replace("/", "")
 
+# Updated TradingView widget configuration with Anchored Volume Profile and persistent autosave state
 tradingview_html = f"""
 <div class="tradingview-widget-container" style="height:450px;width:100%">
   <div id="tradingview_widget" style="height:100%;width:100%"></div>
   <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
   <script type="text/javascript">
   new TradingView.widget({{
-    "width": "100%", "height": 450, "symbol": "OANDA:{tv_symbol}",
-    "interval": "{tv_interval_map.get(interval, '60')}", "timezone": "Etc/UTC",
-    "theme": "dark", "style": "1", "locale": "en", "toolbar_bg": "#131B2E",
-    "enable_publishing": false, "hide_side_toolbar": false, "allow_symbol_change": true,
-    "details": false, "hotlist": false, "calendar": false, "container_id": "tradingview_widget"
+    "width": "100%", 
+    "height": 450, 
+    "symbol": "OANDA:{tv_symbol}",
+    "interval": "{tv_interval_map.get(interval, '60')}", 
+    "timezone": "Etc/UTC",
+    "theme": "dark", 
+    "style": "1", 
+    "locale": "en", 
+    "toolbar_bg": "#131B2E",
+    "enable_publishing": false, 
+    "hide_side_toolbar": false, 
+    "allow_symbol_change": true,
+    "details": false, 
+    "hotlist": false, 
+    "calendar": false, 
+    "container_id": "tradingview_widget",
+    "autosave_id": "quant_terminal_chart_state_{tv_symbol}",
+    "studies": [
+      "AnchoredVolumeProfile@tv-basicstudies"
+    ]
   }});
   </script>
 </div>
