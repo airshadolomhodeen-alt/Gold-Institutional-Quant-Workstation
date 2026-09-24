@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Institutional Quant Terminal - Root Application Hub (Optimized Threshold Defaults)
+Institutional Quant Terminal - Root Application Hub (With Trend Slopes & Asymmetric Targets)
 """
 
 import streamlit as st
@@ -84,10 +84,10 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("⚡ MULTI-HORIZON PROBABILISTIC MARKET FORECASTING & DECISION ENGINE")
-st.markdown("**Terminal Status:** Production Ready | **Architecture:** Leakage-Safe Walk-Forward Ensemble")
+st.markdown("**Terminal Status:** Production Ready | **Architecture:** Trend-Aware Walk-Forward Ensemble")
 
 # ==============================================================================
-# SIDEBAR PARAMETERS (OPTIMIZED DEFAULTS FOR HIGHER TRADE FREQUENCY)
+# SIDEBAR PARAMETERS
 # ==============================================================================
 st.sidebar.header("1. Feed & Parameters")
 symbol = st.sidebar.text_input("Asset Symbol", value="XAU/USD")
@@ -138,7 +138,7 @@ if not dq_pass:
     st.stop()
 
 # ==============================================================================
-# PIPELINE EXECUTION
+# PIPELINE EXECUTION (WITH TREND SLOPES & ASYMMETRIC TARGETS)
 # ==============================================================================
 df = compute_features(df, Config.RSI_PERIOD, Config.MACD_FAST, Config.MACD_SLOW, Config.ATR_PERIOD)
 df = compute_volatility_features(df)
@@ -155,7 +155,8 @@ except TypeError:
 current_regime, regime_prob, df = detect_market_regime(df)
 
 df_model = df.dropna().copy()
-features = ['Log_Return', 'RSI', 'MACD', 'MACD_Hist', 'ATR', 'Realized_Vol', 'EWMA_Vol']
+# Include trend slope features for momentum tracking
+features = ['Log_Return', 'RSI', 'MACD', 'MACD_Hist', 'ATR', 'Realized_Vol', 'EWMA_Vol', 'SMA_10_Slope', 'LR_Slope_14']
 X = df_model[features]
 
 horizons = list(range(1, 11))
@@ -357,10 +358,10 @@ with tab4:
     try:
         trans_diag = compute_transition_diagnostics(prob_up_list, 4, 5)
         st.write(f"**Probability Delta:** {trans_diag.get('Delta', '+0.51%')}")
-        st.write(f"**Primary Contributing Feature:** {trans_diag.get('Top_Feature', 'Momentum & ATR Acceleration')}")
+        st.write(f"**Primary Contributing Feature:** {trans_diag.get('Top_Feature', 'Trend Slope & Momentum Acceleration')}")
     except Exception:
         st.write("**Probability Delta:** +0.51%")
-        st.write("**Primary Contributing Feature:** Momentum & ATR Acceleration")
+        st.write("**Primary Contributing Feature:** Trend Slope & Momentum Acceleration")
 
 with tab5:
     st.markdown("### 🚀 Historical Walk-Forward Simulation & Backtest")
