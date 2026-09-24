@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Institutional Quant Terminal - Root Application Hub (Refactored with Part 42 Execution Plan)
+Institutional Quant Terminal - Root Application Hub (Optimized Threshold Defaults)
 """
 
 import streamlit as st
@@ -87,7 +87,7 @@ st.title("⚡ MULTI-HORIZON PROBABILISTIC MARKET FORECASTING & DECISION ENGINE")
 st.markdown("**Terminal Status:** Production Ready | **Architecture:** Leakage-Safe Walk-Forward Ensemble")
 
 # ==============================================================================
-# SIDEBAR PARAMETERS
+# SIDEBAR PARAMETERS (OPTIMIZED DEFAULTS FOR HIGHER TRADE FREQUENCY)
 # ==============================================================================
 st.sidebar.header("1. Feed & Parameters")
 symbol = st.sidebar.text_input("Asset Symbol", value="XAU/USD")
@@ -100,8 +100,8 @@ commission = st.sidebar.number_input("Commission (%)", value=0.02, step=0.01) / 
 slippage = st.sidebar.number_input("Slippage Cost", value=0.05, step=0.01)
 
 st.sidebar.markdown("### 3. Tradeability Gate Thresholds")
-min_conviction = st.sidebar.slider("Min Probability Conviction", 0.50, 0.80, 0.60, 0.01)
-max_disagreement = st.sidebar.slider("Max Model Disagreement (%)", 10.0, 50.0, 25.0, 5.0)
+min_conviction = st.sidebar.slider("Min Probability Conviction", 0.50, 0.80, 0.53, 0.01)
+max_disagreement = st.sidebar.slider("Max Model Disagreement (%)", 10.0, 50.0, 35.0, 5.0)
 
 TWELVE_DATA_API_KEY = "32b6a749e8c14835b95b8a9c271eec95"
 
