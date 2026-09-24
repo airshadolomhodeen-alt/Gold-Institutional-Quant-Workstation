@@ -4,6 +4,7 @@ Institutional Quant Workstation - Root Application Hub (Refactored & Polished)
 """
 
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import numpy as np
 import requests
@@ -192,11 +193,43 @@ tradeability_state, trade_reasons = evaluate_tradeability_gate(
 )
 
 # ==============================================================================
-# DASHBOARD UI RENDERING
+# DASHBOARD UI RENDERING (TRADINGVIEW WIDGET INTEGRATION)
 # ==============================================================================
-st.subheader(f"📈 Real-Time Price Action: {symbol} ({interval})")
-price_chart_df = df_raw.set_index("Time")[["Close"]]
-st.line_chart(price_chart_df, use_container_width=True)
+st.subheader(f"📈 Interactive Market Feed: {symbol} ({interval})")
+
+tv_interval_map = {"15min": "15", "1h": "60", "4h": "240", "1day": "D"}
+tv_interval = tv_interval_map.get(interval, "60")
+tv_symbol = symbol.replace("/", "")
+
+tradingview_html = f"""
+<div class="tradingview-widget-container" style="height:500px;width:100%">
+  <div id="tradingview_widget" style="height:100%;width:100%"></div>
+  <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+  <script type="text/javascript">
+  new TradingView.widget(
+  {{
+    "width": "100%",
+    "height": 500,
+    "symbol": "OANDA:{tv_symbol}",
+    "interval": "{tv_interval}",
+    "timezone": "Etc/UTC",
+    "theme": "dark",
+    "style": "1",
+    "locale": "en",
+    "toolbar_bg": "#131B2E",
+    "enable_publishing": false,
+    "hide_side_toolbar": false,
+    "allow_symbol_change": true,
+    "details": true,
+    "hotlist": true,
+    "calendar": true,
+    "container_id": "tradingview_widget"
+  }}
+  );
+  </script>
+</div>
+"""
+components.html(tradingview_html, height=520)
 
 st.markdown("---")
 
