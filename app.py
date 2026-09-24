@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Institutional Quant Terminal - Root Application Hub (Refactored with Automated Audit Logging)
+Institutional Quant Terminal - Root Application Hub (Refactored with Part 42 Execution Plan)
 """
 
 import streamlit as st
@@ -279,7 +279,7 @@ with tab2:
     st.pyplot(fig)
 
 with tab3:
-    st.markdown("### Expected Value & Risk Audit")
+    st.markdown("### 🛡️ Expected Value & Risk Audit")
     col_a, col_b = st.columns(2)
     with col_a:
         st.metric("Gross Expected Value", f"${ev_results['Gross_EV']:.2f}")
@@ -289,13 +289,58 @@ with tab3:
         st.metric("Reward-to-Risk Ratio", f"{ev_results['RR_Ratio']:.2f}")
         st.metric("Max Favorable Excursion Prob", f"{path_stats['Prob_MFE_1ATR']:.1f}%")
         st.metric("Tradeability Status", tradeability_state)
-    if trade_reasons:
-        st.warning(f"**Gate Rejection Reasons:** {', '.join(trade_reasons)}")
+
+    st.markdown("---")
+    
+    # PART 42: CONDITIONAL EXECUTION & TRADE PLAN LAYER
+    if tradeability_state == "TRADEABLE":
+        st.markdown("### 🎯 EXECUTION PLAN (Verified Tradeable)")
+        
+        current_close = df['Close'].iloc[-1]
+        atr_val = df_model['ATR'].iloc[-1]
+        
+        is_long = prob_up_list[-1] >= prob_down_list[-1] and ev_results['Net_EV'] > 0
+        direction = "LONG" if is_long else "SHORT"
+        
+        if direction == "LONG":
+            tp1 = current_close + (atr_val * 1.0)
+            tp2 = current_close + (atr_val * 2.0)
+            sl = current_close - (atr_val * 1.0)
+        else:
+            tp1 = current_close - (atr_val * 1.0)
+            tp2 = current_close - (atr_val * 2.0)
+            sl = current_close + (atr_val * 1.0)
+            
+        risk = abs(current_close - sl)
+        reward_tp1 = abs(tp1 - current_close)
+        rr_ratio = reward_tp1 / risk if risk > 0 else 0.0
+        calibrated_p_success = (prob_up_list[-1] if direction == "LONG" else prob_down_list[-1]) * 100
+
+        exec_col1, exec_col2 = st.columns(2)
+        with exec_col1:
+            st.metric("Trade Direction", direction)
+            st.metric("Reference Entry", f"${current_close:.2f}")
+            st.metric("Take Profit 1 (TP1)", f"${tp1:.2f} (+{abs(tp1-current_close):.2f} pts)")
+            st.metric("Take Profit 2 (TP2)", f"${tp2:.2f} (+{abs(tp2-current_close):.2f} pts)")
+        with exec_col2:
+            st.metric("Stop Loss (SL)", f"${sl:.2f} (-{risk:.2f} pts)")
+            st.metric("Risk : Reward (R:R)", f"1 : {rr_ratio:.2f} (TP1)")
+            st.metric("Calibrated Probability of Success (TP1 before SL)", f"{calibrated_p_success:.1f}%")
+            st.metric("Net Expected Value", f"${ev_results['Net_EV']:.2f} (after costs)")
+            
+        st.success("✅ **Gate Status:** TRADEABLE — Passed all multi-model conviction, edge, and uncertainty constraints.")
+    else:
+        st.warning("🚫 **Execution Plan Suppressed (NO-TRADE State)**")
+        st.info("The system has locked out execution because one or more quantitative risk thresholds were violated:")
+        if trade_reasons:
+            for reason in trade_reasons:
+                st.markdown(f"- ⚠️ {reason}")
+        else:
+            st.markdown("- ⚠️ Insufficient Edge or Model Disagreement Exceeds Threshold.")
 
 with tab4:
     st.markdown("### Predictive Contributions & Transition Diagnostics")
     
-    # Safely retrieve feature importances as a DataFrame and pre-format to avoid Styler errors
     first_model = list(models.values())[0] if isinstance(models, dict) and len(models) > 0 else None
     feat_df = get_feature_importances(first_model, features)
     
