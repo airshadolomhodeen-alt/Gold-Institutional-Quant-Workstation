@@ -1,10 +1,18 @@
-# src/risk_engine.py
-def evaluate_trading_decision(max_prob: float, neutral_band: float, avg_win: float, 
-                              avg_loss: float, spread_ticks: float, commission_cost: float, dq_pass: bool):
-    """Calculates Expected Value after friction and triggers NO-TRADE if edge is insufficient."""
-    ev = (max_prob * avg_win) - ((1 - max_prob) * avg_loss) - spread_ticks - commission_cost
-    
-    if max_prob >= neutral_band and ev > 0 and dq_pass:
-        return "TRADEABLE", ev
-    else:
-        return "NO-TRADE / INSUFFICIENT EDGE", ev
+# -*- coding: utf-8 -*-
+"""
+Tradeability Gate Risk Engine
+"""
+def evaluate_tradeability_gate(p_up: float, net_ev: float, model_agreement: float, dq_pass: bool, uncertainty: str):
+    reasons = []
+    if not dq_pass:
+        reasons.append("Data Quality Failure")
+    if net_ev <= 0:
+        reasons.append("Negative Net Expected Value after Costs")
+    if model_agreement < 60.0:
+        reasons.append("Insufficient Model Consensus")
+    if uncertainty == "HIGH":
+        reasons.append("Elevated Forecast Uncertainty")
+        
+    if reasons:
+        return "NO-TRADE", reasons
+    return "TRADEABLE", []
