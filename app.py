@@ -73,7 +73,7 @@ st.title("⚡ INSTITUTIONAL QUANT WORKSTATION: 10-CANDLE PROBABILISTIC ENGINE")
 st.markdown("**Terminal Status:** Live Feed Active (Twelve Data) | **Architecture:** Modular `src/` Pipeline")
 
 # ==============================================================================
-# 1. LIVE DATA INGESTION (TWELVE DATA API)
+# 1. LIVE DATA INGESTION (TWELVE DATA API WITH SAFE VOLUME HANDLING)
 # ==============================================================================
 st.sidebar.header("1. Live Data & Timeframe Parameters")
 symbol = st.sidebar.text_input("Asset Symbol", value="XAU/USD")
@@ -89,18 +89,34 @@ def fetch_twelve_data(sym, tf, size, api_key):
         response = requests.get(url)
         data = response.json()
         
-        if "code" in data and data["code"] != 200:
+        if "code" in data and str(data["code"]) != "200":
             return None, data.get("message", "API Error")
             
         if "values" in data:
             df_api = pd.DataFrame(data["values"])
-            df_api = df_api.rename(columns={"datetime": "Time", "open": "Open", "high": "High", "low": "Low", "close": "Close", "volume": "Volume"})
-            for col in ["Open", "High", "Low", "Close", "Volume"]:
-                df_api[col] = pd.to_numeric(df_api[col], errors='coerce')
+            
+            # Map available columns safely (handles missing volume in forex/gold feeds)
+            rename_map = {"datetime": "Time", "open": "Open", "high": "High", "low": "Low", "close": "Close"}
+            if "volume" in df_api.columns:
+                rename_map["volume"] = "Volume"
+                
+            df_api = df_api.rename(columns=rename_map)
+            
+            # Convert OHLC to numeric
+            for col in ["Open", "High", "Low", "Close"]:
+                if col in df_api.columns:
+                    df_api[col] = pd.to_numeric(df_api[col], errors='coerce')
+            
+            # Handle missing volume gracefully (default to 1.0 if not provided by API)
+            if "Volume" in df_api.columns:
+                df_api["Volume"] = pd.to_numeric(df_api["Volume"], errors='coerce').fillna(0.0)
+            else:
+                df_api["Volume"] = 1.0
+                
             df_api = df_api.sort_values("Time").reset_index(drop=True)
             return df_api, None
         else:
-            return None, "No values found in response."
+            return None, data.get("message", "No values found in response.")
     except Exception as e:
         return None, str(e)
 
@@ -111,7 +127,7 @@ if df_raw is None or df_raw.empty:
     st.error(f"🚨 Twelve Data Connection Failed: {err_msg}. Falling back to simulation frame.")
     dates = pd.date_range(end=pd.Timestamp.now(), periods=500, freq='15min')
     prices = 2000 + np.cumsum(np.random.normal(0, 2, 500))
-    df_raw = pd.DataFrame({"Time": dates, "Open": prices, "High": prices+1, "Low": prices-1, "Close": prices, "Volume": 500})
+    df_raw = pd.DataFrame({"Time": dates, "Open": prices, "High": prices+1, "Low": prices-1, "Close": prices, "Volume": 1.0})
 
 # Run Data Quality Gate (from src/validation.py)
 dq_pass, dq_checks, df = run_data_quality_gate(df_raw)
