@@ -1,32 +1,16 @@
-# -*- coding: utf-8 -*-
-"""
-Risk Engine & Tradeability Gate
-"""
-
-def evaluate_tradeability_gate(prob_up, net_ev, model_agreement_pct, dq_pass, uncertainty, 
-                               min_conviction=0.55, max_disagreement=30.0):
-    """
-    Evaluates whether market conditions meet institutional risk and edge criteria.
-    """
+def evaluate_tradeability_gate(p_up: float, net_ev: float, model_agreement: float, dq_pass: bool, uncertainty: str, min_conviction: float = 0.60, max_disagreement: float = 25.0):
     reasons = []
-    
     if not dq_pass:
-        reasons.append("Data Quality Gate Failed")
-        
-    if net_ev <= 0:
-        reasons.append("Negative Net Expected Value after Costs")
-        
-    max_prob = max(prob_up, 1.0 - prob_up)
-    if max_prob < min_conviction:
-        reasons.append(f"Conviction ({max_prob:.1%}) below minimum threshold ({min_conviction:.1%})")
-        
-    if (100.0 - model_agreement_pct) > max_disagreement:
-        reasons.append("Model Disagreement dispersion too high")
-        
+        return "DATA QUALITY FAILURE", ["Data quality gate failed."]
     if uncertainty == "HIGH":
-        reasons.append("Ensemble uncertainty level is HIGH")
+        reasons.append("Predictive uncertainty elevated.")
+    if (100.0 - model_agreement) > max_disagreement:
+        reasons.append("Model disagreement exceeds maximum tolerance.")
+    if net_ev <= 0:
+        reasons.append("Expected edge insufficient after transaction costs.")
+    if max(p_up, 1.0 - p_up) < min_conviction:
+        reasons.append("Probability conviction below minimum threshold.")
         
     if reasons:
         return "NO-TRADE", reasons
-    else:
-        return "TRADEABLE", []
+    return "TRADEABLE", []
