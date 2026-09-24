@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Institutional Quant Workstation - Root Application Hub (Refactored)
+Institutional Quant Workstation - Root Application Hub (Refactored & Polished)
 """
 
 import streamlit as st
@@ -23,6 +23,9 @@ from src.explainability import compute_transition_diagnostics, get_feature_impor
 from src.visualization import plot_probability_curve, plot_predictive_return_distribution
 from src.config import Config
 
+# ==============================================================================
+# STREAMLIT PAGE CONFIGURATION & HIGH-CONTRAST INSTITUTIONAL STYLING
+# ==============================================================================
 st.set_page_config(
     page_title="Institutional Quant Terminal | Multi-Horizon Probabilistic Engine",
     layout="wide",
@@ -31,28 +34,65 @@ st.set_page_config(
 
 st.markdown("""
     <style>
-    .stApp { background-color: #0A0E17; color: #E2E8F0; font-family: 'Inter', sans-serif; }
+    .stApp { background-color: #0A0E17; color: #F8FAFC; font-family: 'Inter', sans-serif; }
     [data-testid="stSidebar"] { background-color: #131B2E; border-right: 1px solid #1E293B; }
+    
+    /* Sidebar text clarity */
+    [data-testid="stSidebar"] label, [data-testid="stSidebar"] .stMarkdown { color: #E2E8F0 !important; }
+
+    /* Enhanced Metric Cards */
     div[data-testid="stMetric"] {
         background-color: #131B2E; 
-        border: 1px solid #1E293B;
+        border: 1px solid #334155;
         padding: 12px 14px; 
-        border-radius: 6px;
+        border-radius: 8px;
         min-height: 95px;
     }
-    div[data-testid="stMetric"] label { color: #94A3B8 !important; font-size: 0.70rem !important; text-transform: uppercase; }
-    div[data-testid="stMetric"] div[data-testid="stMetricValue"] { color: #F8FAFC !important; font-family: 'Courier New', monospace; font-size: 1.15rem !important; }
-    h1, h2, h3 { color: #F8FAFC; letter-spacing: -0.025em; }
+    div[data-testid="stMetric"] label { 
+        color: #38BDF8 !important; 
+        font-size: 0.75rem !important; 
+        text-transform: uppercase; 
+        letter-spacing: 0.05em;
+        font-weight: 700;
+    }
+    div[data-testid="stMetric"] div[data-testid="stMetricValue"] { 
+        color: #F8FAFC !important; 
+        font-family: 'Courier New', Courier, monospace; 
+        font-size: 1.15rem !important;
+        font-weight: bold;
+    }
+
+    h1, h2, h3 { color: #F8FAFC !important; letter-spacing: -0.025em; }
+    
+    /* Tab Styling: High visibility unselected and active states */
+    .stTabs [data-baseweb="tab-list"] { gap: 8px; background-color: #0A0E17; }
+    .stTabs [data-baseweb="tab"] {
+        background-color: #1E293B !important; 
+        border: 1px solid #334155 !important; 
+        border-radius: 6px; 
+        color: #E2E8F0 !important; 
+        font-weight: 600;
+        padding: 10px 16px;
+    }
+    .stTabs [aria-selected="true"] { 
+        background-color: #38BDF8 !important; 
+        color: #0A0E17 !important; 
+        font-weight: 700;
+    }
+    
+    p, span, label { color: #E2E8F0; }
     </style>
 """, unsafe_allow_html=True)
 
 st.title("⚡ MULTI-HORIZON PROBABILISTIC MARKET FORECASTING & DECISION ENGINE")
 st.markdown("**Terminal Status:** Production Ready | **Architecture:** Leakage-Safe Walk-Forward Ensemble")
 
-# Sidebar Configuration
+# ==============================================================================
+# SIDEBAR PARAMETERS
+# ==============================================================================
 st.sidebar.header("1. Feed & Parameters")
 symbol = st.sidebar.text_input("Asset Symbol", value="XAU/USD")
-interval = st.sidebar.selectbox("Timeframe", ["15min", "1h", "4h", "1day"], index=0)
+interval = st.sidebar.selectbox("Timeframe", ["15min", "1h", "4h", "1day"], index=1)
 outputsize = st.sidebar.slider("Historical Candles", 200, 1000, 500)
 
 st.sidebar.header("2. Execution Costs & Risk")
@@ -94,7 +134,9 @@ if not dq_pass:
     st.write(dq_checks)
     st.stop()
 
-# Pipeline Execution
+# ==============================================================================
+# PIPELINE EXECUTION
+# ==============================================================================
 df = compute_features(df, Config.RSI_PERIOD, Config.MACD_FAST, Config.MACD_SLOW, Config.ATR_PERIOD)
 df = compute_volatility_features(df)
 df = create_multi_horizon_targets(df, threshold_type='atr', threshold_multiplier=0.5)
@@ -146,7 +188,9 @@ path_stats = compute_path_statistics(df_model, horizons)
 ev_results = compute_expected_values(prob_up_list[-1], prob_down_list[-1], exp_returns[-1], spread, commission, slippage, df_model['ATR'].iloc[-1])
 tradeability_state, trade_reasons = evaluate_tradeability_gate(prob_up_list[-1], ev_results['Net_EV'], model_agreements[-1], dq_pass, uncertainties[-1])
 
-# TOP PANEL UI
+# ==============================================================================
+# DASHBOARD UI RENDERING
+# ==============================================================================
 st.subheader("🚨 NEXT 10-CANDLE PROBABILISTIC FORECAST PANEL")
 c1, c2, c3, c4, c5 = st.columns(5)
 c1.metric("Current Price", f"${df['Close'].iloc[-1]:.2f}")
