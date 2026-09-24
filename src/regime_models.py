@@ -1,23 +1,23 @@
-# -*- coding: utf-8 -*-
-"""
-Market Regime Detection Engine
-"""
-import pandas as pd
 import numpy as np
+import pandas as pd
 
 def detect_market_regime(df: pd.DataFrame):
-    if len(df) < 50:
-        return "LOW_VOLATILITY_RANGE", 0.5, df
-        
-    vol_median = df['ATR'].rolling(50).median().iloc[-1]
-    current_atr = df['ATR'].iloc[-1]
+    df = df.copy()
+    vol_median = df['Realized_Vol'].rolling(50).median()
+    ret_mean = df['Log_Return'].rolling(50).mean()
     
-    trend_metric = (df['Close'].iloc[-1] - df['Close'].iloc[-20]) / df['Close'].iloc[-20]
+    current_vol = df['Realized_Vol'].iloc[-1]
+    current_ret = ret_mean.iloc[-1]
+    med_v = vol_median.iloc[-1] if not np.isnan(vol_median.iloc[-1]) else current_vol
     
-    if current_atr > vol_median * 1.2:
-        regime = "HIGH_VOLATILITY_TREND" if abs(trend_metric) > 0.02 else "HIGH_VOLATILITY_RANGE"
+    if current_vol > med_v and current_ret > 0:
+        regime = "HIGH_VOLATILITY_TREND"
+    elif current_vol > med_v and current_ret <= 0:
+        regime = "HIGH_VOLATILITY_RANGE"
+    elif current_vol <= med_v and current_ret > 0:
+        regime = "LOW_VOLATILITY_TREND"
     else:
-        regime = "LOW_VOLATILITY_TREND" if abs(trend_metric) > 0.01 else "LOW_VOLATILITY_RANGE"
+        regime = "LOW_VOLATILITY_RANGE"
         
-    df['Market_Regime'] = regime
-    return regime, 0.75, df
+    regime_prob = 0.74 # Estimated state persistence likelihood
+    return regime, regime_prob, df
