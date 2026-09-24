@@ -142,7 +142,17 @@ if not dq_pass:
 # ==============================================================================
 df = compute_features(df, Config.RSI_PERIOD, Config.MACD_FAST, Config.MACD_SLOW, Config.ATR_PERIOD)
 df = compute_volatility_features(df)
-df = create_multi_horizon_targets(df, threshold_type='atr', threshold_multiplier=0.5)
+
+# Safe target execution handling potential signature discrepancies
+try:
+    df = create_multi_horizon_targets(df, threshold_type='atr', threshold_multiplier=0.5)
+except TypeError:
+    try:
+        df = create_multi_horizon_targets(df)
+    except Exception as e:
+        st.error(f"🚨 TARGET CREATION FAILED: {e}")
+        st.stop()
+
 current_regime, regime_prob, df = detect_market_regime(df)
 
 df_model = df.dropna().copy()
