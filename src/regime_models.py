@@ -1,16 +1,23 @@
-# src/regime_models.py
-import numpy as np
+# -*- coding: utf-8 -*-
+"""
+Market Regime Detection Engine
+"""
 import pandas as pd
+import numpy as np
 
 def detect_market_regime(df: pd.DataFrame):
-    """Detects market volatility and trend regimes based on rolling statistics."""
-    df = df.copy()
-    rolling_vol = df['Realized_Vol']
-    vol_median = rolling_vol.median()
+    if len(df) < 50:
+        return "LOW_VOLATILITY_RANGE", 0.5, df
+        
+    vol_median = df['ATR'].rolling(50).median().iloc[-1]
+    current_atr = df['ATR'].iloc[-1]
     
-    # Simple statistical regime mapping (can be extended to full HMM)
-    df['Regime'] = np.where(rolling_vol > vol_median, "HIGH-VOLATILITY TREND", "LOW-VOLATILITY RANGE")
-    current_regime = df['Regime'].iloc[-1]
-    regime_prob = 0.76  # Estimated state persistence probability
+    trend_metric = (df['Close'].iloc[-1] - df['Close'].iloc[-20]) / df['Close'].iloc[-20]
     
-    return current_regime, regime_prob, df
+    if current_atr > vol_median * 1.2:
+        regime = "HIGH_VOLATILITY_TREND" if abs(trend_metric) > 0.02 else "HIGH_VOLATILITY_RANGE"
+    else:
+        regime = "LOW_VOLATILITY_TREND" if abs(trend_metric) > 0.01 else "LOW_VOLATILITY_RANGE"
+        
+    df['Market_Regime'] = regime
+    return regime, 0.75, df
