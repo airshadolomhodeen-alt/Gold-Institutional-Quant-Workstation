@@ -1,42 +1,31 @@
-# -*- coding: utf-8 -*-
-"""
-Automated Data Quality Gate
-"""
 import pandas as pd
 import numpy as np
 
 def run_data_quality_gate(df: pd.DataFrame):
     checks = {}
-    passed = True
     
-    required_cols = ['Time', 'Open', 'High', 'Low', 'Close']
-    for col in required_cols:
-        if col not in df.columns:
-            checks[f"Missing Column: {col}"] = False
-            passed = False
-        else:
-            checks[f"Missing Column: {col}"] = True
-
-    if not passed:
-        return False, checks, df
-
-    # Check NaNs
-    nan_count = df[required_cols].isna().sum().sum()
-    checks["No Missing OHLC Values"] = nan_count == 0
-    if nan_count > 0:
-        passed = False
-        df = df.dropna(subset=required_cols)
-
-    # Check zero/negative prices
-    valid_prices = (df[['Open', 'High', 'Low', 'Close']] > 0).all().all()
-    checks["Positive Prices"] = valid_prices
-    if not valid_prices:
-        passed = False
-
-    # Check duplicate timestamps
-    dups = df['Time'].duplicated().sum()
-    checks["No Duplicate Timestamps"] = dups == 0
-    if dups > 0:
-        df = df.drop_duplicates(subset=['Time']).reset_index(drop=True)
-
-    return passed, checks, df
+    # 1. Missing values check
+    missing_counts = df[['Open', 'High', 'Low', 'Close']].isna().sum().sum()
+    checks['Missing_Values'] = bool(missing_counts == 0)
+    
+    # 2. Chronological ordering
+    is_sorted = df['Time'].is_monotonic_increasing if 'Time' in df.columns else True
+    checks['Chronological_Order'] = bool(is_sorted)
+    
+    # 3. Invalid OHLC check (High >= Low, High >= Open/Close, Low <= Open/Close)
+    valid_ohlc = (
+        (df['High'] >= df['Low']).all() and
+        (df['High'] >= df['Open']).all() and
+        (df['High'] >= df['Close']).all() and
+        (df['Low'] <= df['Open']).all() and
+        (df['Low'] <= df['Close']).all()
+    )
+    checks['Valid_OHLC'] = bool(valid_ohlc)
+    
+    # 4. Zero or negative prices
+    positive_prices = (df[['Open', 'High', 'Low', 'Close']] > 0).all().all()
+    checks['Positive_Prices'] = bool(positive_prices)
+    
+    # Overall pass status
+    pass_status = all(checks.values())
+    return pass_status, checks, df
