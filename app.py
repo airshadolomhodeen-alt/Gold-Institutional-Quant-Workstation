@@ -28,10 +28,10 @@ from src.logger import log_current_predictions
 from src.config import Config
 
 # ==============================================================================
-# STREAMLIT PAGE CONFIGURATION & HIGH-CONTRAST INSTITUTIONAL STYLING
+# STREAMLIT PAGE CONFIGURATION & STYLING
 # ==============================================================================
 st.set_page_config(
-    page_title="Institutional Quant Terminal | Leak-Proof Probabilistic Engine",
+    page_title="Institutional Quant Terminal | Probabilistic Engine",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -83,8 +83,8 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("⚡ LEAK-PROOF MULTI-HORIZON PROBABILISTIC FORECASTING ENGINE")
-st.markdown("**Terminal Status:** Production Ready | **Architecture:** Strict Temporal Isolation Ensemble")
+st.title("⚡ MULTI-HORIZON PROBABILISTIC FORECASTING ENGINE")
+st.markdown("**Terminal Status:** Production Ready | **Architecture:** Trend-Aware Walk-Forward Ensemble")
 
 # ==============================================================================
 # SIDEBAR PARAMETERS
@@ -138,7 +138,7 @@ if not dq_pass:
     st.stop()
 
 # ==============================================================================
-# PIPELINE EXECUTION (LEAKAGE-SAFE TEMPORAL ENFORCEMENT)
+# PIPELINE EXECUTION
 # ==============================================================================
 df = compute_features(df, Config.RSI_PERIOD, Config.MACD_FAST, Config.MACD_SLOW, Config.ATR_PERIOD)
 df = compute_volatility_features(df)
@@ -154,7 +154,6 @@ except TypeError:
 
 current_regime, regime_prob, df = detect_market_regime(df)
 
-# Drop rows missing rolling metrics or target assignments to protect temporal order
 df_model = df.dropna().copy()
 features = ['Log_Return', 'RSI', 'MACD', 'MACD_Hist', 'ATR', 'Realized_Vol', 'EWMA_Vol', 'SMA_10_Slope', 'LR_Slope_14']
 X = df_model[features]
@@ -176,7 +175,6 @@ for h in horizons:
     for name, model in models.items():
         try:
             model.fit(X_h, y_bin)
-            # Point-in-time extraction: evaluate strictly on the latest historical row
             p = model.predict_proba(X.iloc[[-1]])[0]
             horizon_probs[name] = p[1] if len(p) > 1 else 0.5
         except Exception:
@@ -210,12 +208,8 @@ tradeability_state, trade_reasons = evaluate_tradeability_gate(
 )
 
 log_current_predictions(
-    symbol=symbol,
-    interval=interval,
-    current_price=df['Close'].iloc[-1],
-    horizons=horizons,
-    prob_up_list=prob_up_list,
-    prob_down_list=prob_down_list,
+    symbol=symbol, interval=interval, current_price=df['Close'].iloc[-1],
+    horizons=horizons, prob_up_list=prob_up_list, prob_down_list=prob_down_list,
     return_predictions=return_predictions
 )
 
@@ -262,14 +256,9 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
 with tab1:
     forecast_df = pd.DataFrame({
         "Horizon": [f"T+{h}" for h in horizons],
-        "P(UP)": prob_up_list,
-        "P(NEUTRAL)": prob_neutral_list,
-        "P(DOWN)": prob_down_list,
-        "Expected Return": exp_returns,
-        "Lower Bound (95%)": lower_bounds,
-        "Upper Bound (95%)": upper_bounds,
-        "Model Agreement": [f"{m:.1f}%" for m in model_agreements],
-        "Uncertainty": uncertainties
+        "P(UP)": prob_up_list, "P(NEUTRAL)": prob_neutral_list, "P(DOWN)": prob_down_list,
+        "Expected Return": exp_returns, "Lower Bound (95%)": lower_bounds, "Upper Bound (95%)": upper_bounds,
+        "Model Agreement": [f"{m:.1f}%" for m in model_agreements], "Uncertainty": uncertainties
     })
     st.dataframe(forecast_df.style.format({
         "P(UP)": "{:.2%}", "P(NEUTRAL)": "{:.2%}", "P(DOWN)": "{:.2%}",
@@ -296,7 +285,6 @@ with tab3:
     
     if tradeability_state == "TRADEABLE":
         st.markdown("### 🎯 EXECUTION PLAN (Verified Tradeable)")
-        
         current_close = df['Close'].iloc[-1]
         atr_val = df_model['ATR'].iloc[-1]
         
@@ -304,85 +292,51 @@ with tab3:
         direction = "LONG" if is_long else "SHORT"
         
         if direction == "LONG":
-            tp1 = current_close + (atr_val * 1.0)
-            tp2 = current_close + (atr_val * 2.0)
-            sl = current_close - (atr_val * 1.0)
+            tp1, tp2, sl = current_close + atr_val, current_close + (atr_val * 2), current_close - atr_val
         else:
-            tp1 = current_close - (atr_val * 1.0)
-            tp2 = current_close - (atr_val * 2.0)
-            sl = current_close + (atr_val * 1.0)
+            tp1, tp2, sl = current_close - atr_val, current_close - (atr_val * 2), current_close + atr_val
             
         risk = abs(current_close - sl)
         reward_tp1 = abs(tp1 - current_close)
         rr_ratio = reward_tp1 / risk if risk > 0 else 0.0
-        calibrated_p_success = (prob_up_list[-1] if direction == "LONG" else prob_down_list[-1]) * 100
+        cal_success = (prob_up_list[-1] if direction == "LONG" else prob_down_list[-1]) * 100
 
         exec_col1, exec_col2 = st.columns(2)
         with exec_col1:
             st.metric("Trade Direction", direction)
             st.metric("Reference Entry", f"${current_close:.2f}")
-            st.metric("Take Profit 1 (TP1)", f"${tp1:.2f} (+{abs(tp1-current_close):.2f} pts)")
-            st.metric("Take Profit 2 (TP2)", f"${tp2:.2f} (+{abs(tp2-current_close):.2f} pts)")
+            st.metric("Take Profit 1 (TP1)", f"${tp1:.2f}")
         with exec_col2:
-            st.metric("Stop Loss (SL)", f"${sl:.2f} (-{risk:.2f} pts)")
-            st.metric("Risk : Reward (R:R)", f"1 : {rr_ratio:.2f} (TP1)")
-            st.metric("Calibrated Probability of Success", f"{calibrated_p_success:.1f}%")
-            st.metric("Net Expected Value", f"${ev_results['Net_EV']:.2f} (after costs)")
+            st.metric("Stop Loss (SL)", f"${sl:.2f}")
+            st.metric("Risk : Reward", f"1 : {rr_ratio:.2f}")
+            st.metric("Success Probability", f"{cal_success:.1f}%")
             
-        st.success("✅ **Gate Status:** TRADEABLE — Passed all conviction, edge, and temporal integrity filters.")
+        st.success("✅ **Gate Status:** TRADEABLE — Passed conviction and temporal rules.")
     else:
         st.warning("🚫 **Execution Plan Suppressed (NO-TRADE State)**")
-        st.info("The system has locked out execution because one or more quantitative risk thresholds were violated:")
-        if trade_reasons:
-            for reason in trade_reasons:
-                st.markdown(f"- ⚠️ {reason}")
-        else:
-            st.markdown("- ⚠️ Insufficient Edge or Model Disagreement Exceeds Threshold.")
+        for reason in (trade_reasons or ["Insufficient edge or high disagreement."]):
+            st.markdown(f"- ⚠️ {reason}")
 
 with tab4:
-    st.markdown("### Predictive Contributions & Transition Diagnostics")
-    
-    first_model = list(models.values())[0] if isinstance(models, dict) and len(models) > 0 else None
+    st.markdown("### Predictive Contributions")
+    first_model = list(models.values())[0] if models else None
     feat_df = get_feature_importances(first_model, features)
-    
     if isinstance(feat_df, dict):
         feat_df = pd.DataFrame(list(feat_df.items()), columns=["Feature", "Predictive Contribution"])
-        
-    if "Predictive Contribution" in feat_df.columns:
-        feat_df["Predictive Contribution"] = feat_df["Predictive Contribution"].apply(
-            lambda x: f"{x * 100:.2f}%" if isinstance(x, (int, float)) else str(x)
-        )
     st.dataframe(feat_df, use_container_width=True)
-    
-    st.markdown("### Transition Diagnostic (T+4 → T+5)")
-    try:
-        trans_diag = compute_transition_diagnostics(prob_up_list, 4, 5)
-        st.write(f"**Probability Delta:** {trans_diag.get('Delta', '+0.51%')}")
-        st.write(f"**Primary Contributing Feature:** {trans_diag.get('Top_Feature', 'Trend Slope & Momentum Acceleration')}")
-    except Exception:
-        st.write("**Probability Delta:** +0.51%")
-        st.write("**Primary Contributing Feature:** Trend Slope & Momentum Acceleration")
 
 with tab5:
-    st.markdown("### 🚀 Historical Walk-Forward Simulation & Backtest")
-    if st.button("Execute Walk-Forward Simulation Across Candles"):
-        with st.spinner("Simulating leakage-safe institutional execution..."):
+    st.markdown("### 🚀 Historical Walk-Forward Simulation")
+    if st.button("Execute Simulation"):
+        with st.spinner("Running historical backtest simulation..."):
             sim_results, metrics = run_walk_forward_simulation(
                 df_model, features, models, 
                 min_conviction=min_conviction, max_disagreement=max_disagreement,
                 spread=spread, commission=commission
             )
             st.line_chart(sim_results.set_index("Time")["Capital"])
-            
-            st.markdown("### 📊 Backtest Performance Summary")
             col1, col2, col3, col4 = st.columns(4)
             col1.metric("Final Capital", f"${metrics['Final_Equity']:,.2f}")
             col2.metric("Total Return", f"{metrics['Total_Return_Pct']:+.2f}%")
             col3.metric("Max Drawdown", f"{metrics['Max_Drawdown_Pct']:.2f}%")
-            col4.metric("Win Rate", f"{metrics['Win_Rate']:.1f}% ({metrics['Total_Trades']} trades)")
-            
-            csv_data = sim_results.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                label="📥 Download Simulation Trade Log (CSV)",
-                data=csv_data, file_name="backtest_simulation_results.csv", mime="text/csv",
-            )
+            col4.metric("Win Rate", f"{metrics['Win_Rate']:.1f}%")
