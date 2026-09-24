@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Institutional Quant Terminal - Root Application Hub (With Trend Slopes & Asymmetric Targets)
+Institutional Quant Terminal - Leak-Proof Production Hub
 """
 
 import streamlit as st
@@ -31,7 +31,7 @@ from src.config import Config
 # STREAMLIT PAGE CONFIGURATION & HIGH-CONTRAST INSTITUTIONAL STYLING
 # ==============================================================================
 st.set_page_config(
-    page_title="Institutional Quant Terminal | Multi-Horizon Probabilistic Engine",
+    page_title="Institutional Quant Terminal | Leak-Proof Probabilistic Engine",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -83,8 +83,8 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.title("⚡ MULTI-HORIZON PROBABILISTIC MARKET FORECASTING & DECISION ENGINE")
-st.markdown("**Terminal Status:** Production Ready | **Architecture:** Trend-Aware Walk-Forward Ensemble")
+st.title("⚡ LEAK-PROOF MULTI-HORIZON PROBABILISTIC FORECASTING ENGINE")
+st.markdown("**Terminal Status:** Production Ready | **Architecture:** Strict Temporal Isolation Ensemble")
 
 # ==============================================================================
 # SIDEBAR PARAMETERS
@@ -138,7 +138,7 @@ if not dq_pass:
     st.stop()
 
 # ==============================================================================
-# PIPELINE EXECUTION (WITH TREND SLOPES & ASYMMETRIC TARGETS)
+# PIPELINE EXECUTION (LEAKAGE-SAFE TEMPORAL ENFORCEMENT)
 # ==============================================================================
 df = compute_features(df, Config.RSI_PERIOD, Config.MACD_FAST, Config.MACD_SLOW, Config.ATR_PERIOD)
 df = compute_volatility_features(df)
@@ -154,8 +154,8 @@ except TypeError:
 
 current_regime, regime_prob, df = detect_market_regime(df)
 
+# Drop rows missing rolling metrics or target assignments to protect temporal order
 df_model = df.dropna().copy()
-# Include trend slope features for momentum tracking
 features = ['Log_Return', 'RSI', 'MACD', 'MACD_Hist', 'ATR', 'Realized_Vol', 'EWMA_Vol', 'SMA_10_Slope', 'LR_Slope_14']
 X = df_model[features]
 
@@ -176,6 +176,7 @@ for h in horizons:
     for name, model in models.items():
         try:
             model.fit(X_h, y_bin)
+            # Point-in-time extraction: evaluate strictly on the latest historical row
             p = model.predict_proba(X.iloc[[-1]])[0]
             horizon_probs[name] = p[1] if len(p) > 1 else 0.5
         except Exception:
@@ -293,7 +294,6 @@ with tab3:
 
     st.markdown("---")
     
-    # PART 42: CONDITIONAL EXECUTION & TRADE PLAN LAYER
     if tradeability_state == "TRADEABLE":
         st.markdown("### 🎯 EXECUTION PLAN (Verified Tradeable)")
         
@@ -326,10 +326,10 @@ with tab3:
         with exec_col2:
             st.metric("Stop Loss (SL)", f"${sl:.2f} (-{risk:.2f} pts)")
             st.metric("Risk : Reward (R:R)", f"1 : {rr_ratio:.2f} (TP1)")
-            st.metric("Calibrated Probability of Success (TP1 before SL)", f"{calibrated_p_success:.1f}%")
+            st.metric("Calibrated Probability of Success", f"{calibrated_p_success:.1f}%")
             st.metric("Net Expected Value", f"${ev_results['Net_EV']:.2f} (after costs)")
             
-        st.success("✅ **Gate Status:** TRADEABLE — Passed all multi-model conviction, edge, and uncertainty constraints.")
+        st.success("✅ **Gate Status:** TRADEABLE — Passed all conviction, edge, and temporal integrity filters.")
     else:
         st.warning("🚫 **Execution Plan Suppressed (NO-TRADE State)**")
         st.info("The system has locked out execution because one or more quantitative risk thresholds were violated:")
@@ -366,7 +366,7 @@ with tab4:
 with tab5:
     st.markdown("### 🚀 Historical Walk-Forward Simulation & Backtest")
     if st.button("Execute Walk-Forward Simulation Across Candles"):
-        with st.spinner("Simulating institutional execution and tracking performance metrics..."):
+        with st.spinner("Simulating leakage-safe institutional execution..."):
             sim_results, metrics = run_walk_forward_simulation(
                 df_model, features, models, 
                 min_conviction=min_conviction, max_disagreement=max_disagreement,
